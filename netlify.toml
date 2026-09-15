@@ -1,0 +1,9 @@
+[build]
+  command = "yarn run build"
+  publish = ".next"
+
+[[headers]]
+  for = "/_next/static/*"
+
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
