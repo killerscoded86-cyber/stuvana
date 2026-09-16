@@ -23,7 +23,8 @@ export default function PropertyDetailsPage() {
     useState<PropertyMedia | null>(null);
 
   const [user, setUser] = useState<any>(null);
-  const [accountType, setAccountType] = useState<string | null>(null);
+  const [accountType, setAccountType] =
+    useState<string | null>(null);
 
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -45,18 +46,26 @@ export default function PropertyDetailsPage() {
       setUser(user);
 
       /* LOAD USER ACCOUNT TYPE */
+
       if (user) {
-        const { data: profile, error: profileError } =
-          await supabase
-            .from("profiles")
-            .select("account_type")
-            .eq("id", user.id)
-            .maybeSingle();
+        const {
+          data: profile,
+          error: profileError,
+        } = await supabase
+          .from("profiles")
+          .select("account_type")
+          .eq("id", user.id)
+          .maybeSingle();
 
         if (profileError) {
-          console.error("Profile error:", profileError);
+          console.error(
+            "Profile error:",
+            profileError
+          );
         } else {
-          setAccountType(profile?.account_type || null);
+          setAccountType(
+            profile?.account_type || null
+          );
         }
       } else {
         setAccountType(null);
@@ -64,7 +73,10 @@ export default function PropertyDetailsPage() {
 
       /* LOAD ONLY APPROVED PROPERTY */
 
-      const { data, error } = await supabase
+      const {
+        data,
+        error,
+      } = await supabase
         .from("properties")
         .select("*")
         .eq("id", propertyId)
@@ -72,7 +84,10 @@ export default function PropertyDetailsPage() {
         .single();
 
       if (error || !data) {
-        console.error("Property error:", error);
+        console.error(
+          "Property error:",
+          error
+        );
 
         setProperty(null);
         setLoading(false);
@@ -95,28 +110,42 @@ export default function PropertyDetailsPage() {
         });
 
       if (mediaError) {
-        console.error("Property media error:", mediaError);
+        console.error(
+          "Property media error:",
+          mediaError
+        );
       }
 
-      const loadedMedia = mediaData || [];
+      const loadedMedia =
+        mediaData || [];
 
       setMedia(loadedMedia);
 
-      const mainImage = loadedMedia.find(
-        (item) =>
-          item.media_type === "image" &&
-          item.public_url === data.image_url
-      );
-
-      if (mainImage) {
-        setSelectedMedia(mainImage);
-      } else {
-        const firstImage = loadedMedia.find(
-          (item) => item.media_type === "image"
+      const mainImage =
+        loadedMedia.find(
+          (item) =>
+            item.media_type ===
+              "image" &&
+            item.public_url ===
+              data.image_url
         );
 
+      if (mainImage) {
+        setSelectedMedia(
+          mainImage
+        );
+      } else {
+        const firstImage =
+          loadedMedia.find(
+            (item) =>
+              item.media_type ===
+              "image"
+          );
+
         if (firstImage) {
-          setSelectedMedia(firstImage);
+          setSelectedMedia(
+            firstImage
+          );
         }
       }
 
@@ -130,7 +159,10 @@ export default function PropertyDetailsPage() {
           .from("saved_properties")
           .select("id")
           .eq("user_id", user.id)
-          .eq("property_id", propertyId)
+          .eq(
+            "property_id",
+            propertyId
+          )
           .maybeSingle();
 
         if (savedError) {
@@ -151,20 +183,27 @@ export default function PropertyDetailsPage() {
 
   async function toggleSave() {
     if (!user) {
-      alert("Please log in to save properties.");
+      alert(
+        "Please log in to save properties."
+      );
 
       router.push("/login");
       return;
     }
 
-    const isSaved = saved;
-
-    if (isSaved) {
-      const { error } = await supabase
-        .from("saved_properties")
-        .delete()
-        .eq("user_id", user.id)
-        .eq("property_id", propertyId);
+    if (saved) {
+      const { error } =
+        await supabase
+          .from("saved_properties")
+          .delete()
+          .eq(
+            "user_id",
+            user.id
+          )
+          .eq(
+            "property_id",
+            propertyId
+          );
 
       if (error) {
         console.error(
@@ -172,18 +211,23 @@ export default function PropertyDetailsPage() {
           error
         );
 
-        alert("Could not remove property.");
+        alert(
+          "Could not remove property."
+        );
+
         return;
       }
 
       setSaved(false);
     } else {
-      const { error } = await supabase
-        .from("saved_properties")
-        .insert({
-          user_id: user.id,
-          property_id: propertyId,
-        });
+      const { error } =
+        await supabase
+          .from("saved_properties")
+          .insert({
+            user_id: user.id,
+            property_id:
+              propertyId,
+          });
 
       if (error) {
         console.error(
@@ -191,7 +235,10 @@ export default function PropertyDetailsPage() {
           error
         );
 
-        alert("Could not save property.");
+        alert(
+          "Could not save property."
+        );
+
         return;
       }
 
@@ -223,12 +270,31 @@ export default function PropertyDetailsPage() {
 
     if (!property) return;
 
+    /* CHECK AVAILABILITY BEFORE PAYING */
+
+    const currentSpaces =
+      Number(property.spaces);
+
+    if (
+      Number.isFinite(
+        currentSpaces
+      ) &&
+      currentSpaces <= 0
+    ) {
+      alert(
+        "This accommodation is currently unavailable."
+      );
+
+      return;
+    }
+
     setPaying(true);
 
     try {
       const {
         data: { session },
-      } = await supabase.auth.getSession();
+      } =
+        await supabase.auth.getSession();
 
       if (!session?.access_token) {
         alert(
@@ -239,22 +305,26 @@ export default function PropertyDetailsPage() {
         return;
       }
 
-      const response = await fetch(
-        "/api/payments/initialize",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            propertyId: property.id,
-            email: user.email,
-          }),
-        }
-      );
+      const response =
+        await fetch(
+          "/api/payments/initialize",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+              propertyId:
+                property.id,
+              email: user.email,
+            }),
+          }
+        );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
         console.error(
@@ -271,7 +341,9 @@ export default function PropertyDetailsPage() {
         return;
       }
 
-      if (!data.authorization_url) {
+      if (
+        !data.authorization_url
+      ) {
         alert(
           "Paystack payment link was not created."
         );
@@ -330,13 +402,18 @@ export default function PropertyDetailsPage() {
               color: "#666",
             }}
           >
-            The property may still be waiting for approval,
-            may have been rejected, or may no longer be listed.
+            The property may still be
+            waiting for approval, may
+            have been rejected, or may
+            no longer be listed.
           </p>
 
           <button
+            type="button"
             onClick={() =>
-              router.push("/#housing")
+              router.push(
+                "/#housing"
+              )
             }
             style={{
               marginTop: "20px",
@@ -349,23 +426,41 @@ export default function PropertyDetailsPage() {
     );
   }
 
-  const imageMedia = media.filter(
-    (item) =>
-      item.media_type === "image"
-  );
+  const imageMedia =
+    media.filter(
+      (item) =>
+        item.media_type ===
+        "image"
+    );
 
-  const videoMedia = media.find(
-    (item) =>
-      item.media_type === "video"
-  );
+  const videoMedia =
+    media.find(
+      (item) =>
+        item.media_type ===
+        "video"
+    );
 
   const isStudent =
     !!user &&
     accountType === "student";
 
+  const spaces =
+    Number(property.spaces);
+
+  const roomUnavailable =
+    Number.isFinite(spaces) &&
+    spaces <= 0;
+
+  const price = Number(
+    property.display_price ??
+      property.price
+  );
+
   const hasPropertyCoordinates =
-    typeof property.latitude === "number" &&
-    typeof property.longitude === "number";
+    typeof property.latitude ===
+      "number" &&
+    typeof property.longitude ===
+      "number";
 
   const propertyMapUrl =
     hasPropertyCoordinates
@@ -374,6 +469,8 @@ export default function PropertyDetailsPage() {
 
   return (
     <main className="property-details-page">
+      {/* NAVIGATION */}
+
       <nav className="dashboard-nav">
         <a
           href="/"
@@ -382,17 +479,36 @@ export default function PropertyDetailsPage() {
           STUVANA
         </a>
 
-        <button
-          onClick={() =>
-            router.push("/#housing")
-          }
+        <div
+          className="dashboard-nav-actions"
         >
-          ← Back to Housing
-        </button>
+          <button
+            type="button"
+            onClick={() =>
+              router.push(
+                "/#housing"
+              )
+            }
+          >
+            ← Back to Housing
+          </button>
+
+          {user && (
+            <button
+              type="button"
+              onClick={() =>
+                router.push(
+                  "/saved"
+                )
+              }
+            >
+              Saved Properties
+            </button>
+          )}
+        </div>
       </nav>
 
       <section className="property-details-container">
-
         {/* PROPERTY MEDIA */}
 
         <div className="property-details-media">
@@ -400,7 +516,9 @@ export default function PropertyDetailsPage() {
             selectedMedia.media_type ===
             "video" ? (
               <video
-                key={selectedMedia.id}
+                key={
+                  selectedMedia.id
+                }
                 src={
                   selectedMedia.public_url
                 }
@@ -413,19 +531,27 @@ export default function PropertyDetailsPage() {
                 src={
                   selectedMedia.public_url
                 }
-                alt={property.name}
+                alt={
+                  property.name
+                }
               />
             )
           ) : property.image_url ? (
             <img
-              src={property.image_url}
-              alt={property.name}
+              src={
+                property.image_url
+              }
+              alt={
+                property.name
+              }
             />
           ) : (
             <div className="property-placeholder">
               <span>🏠</span>
+
               <p>
-                Student Accommodation
+                Student
+                Accommodation
               </p>
             </div>
           )}
@@ -435,27 +561,34 @@ export default function PropertyDetailsPage() {
 
         {media.length > 0 && (
           <div className="public-property-media-gallery">
-
-            {imageMedia.map((item) => (
-              <button
-                type="button"
-                key={item.id}
-                className={
-                  selectedMedia?.id ===
-                  item.id
-                    ? "public-media-thumbnail active"
-                    : "public-media-thumbnail"
-                }
-                onClick={() =>
-                  setSelectedMedia(item)
-                }
-              >
-                <img
-                  src={item.public_url}
-                  alt={property.name}
-                />
-              </button>
-            ))}
+            {imageMedia.map(
+              (item) => (
+                <button
+                  type="button"
+                  key={item.id}
+                  className={
+                    selectedMedia?.id ===
+                    item.id
+                      ? "public-media-thumbnail active"
+                      : "public-media-thumbnail"
+                  }
+                  onClick={() =>
+                    setSelectedMedia(
+                      item
+                    )
+                  }
+                >
+                  <img
+                    src={
+                      item.public_url
+                    }
+                    alt={
+                      property.name
+                    }
+                  />
+                </button>
+              )
+            )}
 
             {videoMedia && (
               <button
@@ -483,14 +616,12 @@ export default function PropertyDetailsPage() {
                 </div>
               </button>
             )}
-
           </div>
         )}
 
         {/* PROPERTY INFORMATION */}
 
         <div className="property-details-content">
-
           <div className="property-details-top">
             <div>
               <p className="hero-label">
@@ -503,30 +634,84 @@ export default function PropertyDetailsPage() {
 
               <p className="property-location">
                 📍{" "}
-                {property.location}
+                {
+                  property.location
+                }
               </p>
             </div>
 
             <button
+              type="button"
               className="save-button"
-              onClick={toggleSave}
+              onClick={
+                toggleSave
+              }
               aria-label={
                 saved
                   ? "Remove saved property"
                   : "Save property"
               }
             >
-              {saved ? "♥" : "♡"}
+              {saved
+                ? "♥"
+                : "♡"}
             </button>
           </div>
+
+          {/* AVAILABILITY NOTICE */}
+
+          {roomUnavailable ? (
+            <div
+              style={{
+                marginTop: "20px",
+                padding: "14px 18px",
+                borderRadius: "12px",
+                background:
+                  "#fef2f2",
+                border:
+                  "1px solid #fecaca",
+                color:
+                  "#991b1b",
+                fontWeight: 600,
+              }}
+            >
+              ⚠️ This room is
+              currently unavailable.
+            </div>
+          ) : (
+            <div
+              style={{
+                marginTop: "20px",
+                padding: "14px 18px",
+                borderRadius: "12px",
+                background:
+                  "#f0fdf4",
+                border:
+                  "1px solid #bbf7d0",
+                color:
+                  "#166534",
+                fontWeight: 600,
+              }}
+            >
+              ✓{" "}
+              {spaces}{" "}
+              {spaces === 1
+                ? "space"
+                : "spaces"}{" "}
+              currently available
+            </div>
+          )}
+
+          {/* PRICE */}
 
           <div className="property-details-price">
             <strong>
               GH₵{" "}
-              {Number(
-                property.display_price ??
-                  property.price
-              ).toLocaleString()}
+              {Number.isFinite(
+                price
+              )
+                ? price.toLocaleString()
+                : "0"}
             </strong>
 
             <span>
@@ -534,15 +719,18 @@ export default function PropertyDetailsPage() {
             </span>
           </div>
 
-          <div className="property-details-info">
+          {/* QUICK INFORMATION */}
 
+          <div className="property-details-info">
             <div>
               <span>
                 🏠 Room Type
               </span>
 
               <strong>
-                {property.room_type}
+                {
+                  property.room_type
+                }
               </strong>
             </div>
 
@@ -552,7 +740,16 @@ export default function PropertyDetailsPage() {
               </span>
 
               <strong>
-                {property.spaces} spaces
+                {Number.isFinite(
+                  spaces
+                )
+                  ? `${spaces} ${
+                      spaces ===
+                      1
+                        ? "space"
+                        : "spaces"
+                    }`
+                  : "Not specified"}
               </strong>
             </div>
 
@@ -562,14 +759,163 @@ export default function PropertyDetailsPage() {
               </span>
 
               <strong>
-                {property.university ||
-                  "Not specified"}
+                {
+                  property.university ||
+                  "Not specified"
+                }
               </strong>
             </div>
 
+            {property.walking_minutes && (
+              <div>
+                <span>
+                  🚶 Campus Walk
+                </span>
+
+                <strong>
+                  {
+                    property.walking_minutes
+                  }{" "}
+                  minutes
+                </strong>
+              </div>
+            )}
           </div>
 
+          {/* ROOM DETAILS */}
+
+          <div
+            style={{
+              marginTop: "30px",
+              padding: "24px",
+              borderRadius: "16px",
+              border:
+                "1px solid rgba(0,0,0,0.08)",
+              background: "#fafafa",
+            }}
+          >
+            <p className="hero-label">
+              ROOM INFORMATION
+            </p>
+
+            <h2
+              style={{
+                marginBottom:
+                  "16px",
+              }}
+            >
+              Accommodation Details
+            </h2>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "repeat(auto-fit, minmax(180px, 1fr))",
+                gap: "14px",
+              }}
+            >
+              <div>
+                <small
+                  style={{
+                    color: "#777",
+                  }}
+                >
+                  Room Type
+                </small>
+
+                <p
+                  style={{
+                    marginTop:
+                      "4px",
+                    fontWeight: 600,
+                  }}
+                >
+                  {
+                    property.room_type
+                  }
+                </p>
+              </div>
+
+              <div>
+                <small
+                  style={{
+                    color: "#777",
+                  }}
+                >
+                  University
+                </small>
+
+                <p
+                  style={{
+                    marginTop:
+                      "4px",
+                    fontWeight: 600,
+                  }}
+                >
+                  {
+                    property.university ||
+                    "Not specified"
+                  }
+                </p>
+              </div>
+
+              <div>
+                <small
+                  style={{
+                    color: "#777",
+                  }}
+                >
+                  Payment Period
+                </small>
+
+                <p
+                  style={{
+                    marginTop:
+                      "4px",
+                    fontWeight: 600,
+                  }}
+                >
+                  {
+                    property.period ||
+                    "Not specified"
+                  }
+                </p>
+              </div>
+
+              <div>
+                <small
+                  style={{
+                    color: "#777",
+                  }}
+                >
+                  Available Spaces
+                </small>
+
+                <p
+                  style={{
+                    marginTop:
+                      "4px",
+                    fontWeight: 600,
+                  }}
+                >
+                  {Number.isFinite(
+                    spaces
+                  )
+                    ? spaces
+                    : "Not specified"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* DESCRIPTION */}
+
           <div className="property-description">
+            <p className="hero-label">
+              ABOUT THE PROPERTY
+            </p>
+
             <h2>
               About this accommodation
             </h2>
@@ -591,7 +937,8 @@ export default function PropertyDetailsPage() {
             >
               <div
                 style={{
-                  marginBottom: "16px",
+                  marginBottom:
+                    "16px",
                 }}
               >
                 <p className="hero-label">
@@ -605,33 +952,45 @@ export default function PropertyDetailsPage() {
                 <p
                   style={{
                     color: "#666",
-                    marginTop: "6px",
+                    marginTop:
+                      "6px",
                   }}
                 >
-                  The map shows the precise
-                  location provided by the
-                  property owner.
+                  The map shows
+                  the precise
+                  location
+                  provided by
+                  the property
+                  owner.
                 </p>
               </div>
 
               <div
                 style={{
                   width: "100%",
-                  overflow: "hidden",
-                  borderRadius: "16px",
+                  overflow:
+                    "hidden",
+                  borderRadius:
+                    "16px",
                   border:
                     "1px solid rgba(0,0,0,0.08)",
-                  background: "#f3f4f6",
+                  background:
+                    "#f3f4f6",
                 }}
               >
                 <iframe
                   title={`${property.name} location`}
-                  src={propertyMapUrl}
+                  src={
+                    propertyMapUrl
+                  }
                   style={{
-                    width: "100%",
-                    height: "400px",
+                    width:
+                      "100%",
+                    height:
+                      "400px",
                     border: 0,
-                    display: "block",
+                    display:
+                      "block",
                   }}
                   loading="lazy"
                 />
@@ -639,13 +998,22 @@ export default function PropertyDetailsPage() {
 
               <div
                 style={{
-                  marginTop: "10px",
-                  fontSize: "13px",
-                  color: "#777",
+                  marginTop:
+                    "10px",
+                  fontSize:
+                    "13px",
+                  color:
+                    "#777",
                 }}
               >
-                📍 {property.latitude.toFixed(6)},{" "}
-                {property.longitude.toFixed(6)}
+                📍{" "}
+                {property.latitude.toFixed(
+                  6
+                )}
+                ,{" "}
+                {property.longitude.toFixed(
+                  6
+                )}
               </div>
             </div>
           )}
@@ -654,7 +1022,6 @@ export default function PropertyDetailsPage() {
 
           {videoMedia && (
             <div className="public-video-section">
-
               <div className="public-video-heading">
                 <div>
                   <p className="hero-label">
@@ -676,7 +1043,6 @@ export default function PropertyDetailsPage() {
                 preload="metadata"
                 className="public-property-video-large"
               />
-
             </div>
           )}
 
@@ -685,17 +1051,26 @@ export default function PropertyDetailsPage() {
           {isStudent ? (
             <div
               style={{
-                marginTop: "30px",
-                padding: "24px",
-                borderRadius: "16px",
+                marginTop:
+                  "30px",
+                padding:
+                  "24px",
+                borderRadius:
+                  "16px",
                 border:
                   "1px solid rgba(0,0,0,0.08)",
-                background: "#fafafa",
+                background:
+                  "#fafafa",
               }}
             >
+              <p className="hero-label">
+                SECURE BOOKING
+              </p>
+
               <h2
                 style={{
-                  marginBottom: "8px",
+                  marginBottom:
+                    "8px",
                 }}
               >
                 Book this accommodation
@@ -703,62 +1078,100 @@ export default function PropertyDetailsPage() {
 
               <p
                 style={{
-                  marginBottom: "18px",
-                  color: "#666",
+                  marginBottom:
+                    "18px",
+                  color:
+                    "#666",
+                  lineHeight:
+                    "1.6",
                 }}
               >
-                Secure your accommodation
-                by paying through Paystack.
+                Secure your
+                accommodation
+                by paying
+                through
+                Paystack.
+                Your booking
+                will be
+                confirmed after
+                successful
+                payment.
               </p>
 
               <button
                 className="details-primary-button"
-                onClick={handlePayment}
-                disabled={paying}
+                onClick={
+                  handlePayment
+                }
+                disabled={
+                  paying ||
+                  roomUnavailable
+                }
+                type="button"
                 style={{
-                  width: "100%",
-                  cursor: paying
-                    ? "not-allowed"
-                    : "pointer",
-                  opacity: paying
-                    ? 0.7
-                    : 1,
+                  width:
+                    "100%",
+                  cursor:
+                    paying ||
+                    roomUnavailable
+                      ? "not-allowed"
+                      : "pointer",
+                  opacity:
+                    paying ||
+                    roomUnavailable
+                      ? 0.7
+                      : 1,
                 }}
               >
-                {paying
+                {roomUnavailable
+                  ? "Room Unavailable"
+                  : paying
                   ? "Opening Paystack..."
-                  : `Pay GH₵ ${Number(
-                      property.display_price ??
-                        property.price
-                    ).toLocaleString()}`}
+                  : `Pay GH₵ ${
+                      Number.isFinite(
+                        price
+                      )
+                        ? price.toLocaleString()
+                        : "0"
+                    }`}
               </button>
 
               <p
                 style={{
-                  marginTop: "12px",
-                  fontSize: "13px",
-                  color: "#777",
-                  textAlign: "center",
+                  marginTop:
+                    "12px",
+                  fontSize:
+                    "13px",
+                  color:
+                    "#777",
+                  textAlign:
+                    "center",
                 }}
               >
-                Secure payment powered
-                by Paystack
+                Secure payment
+                powered by
+                Paystack
               </p>
             </div>
           ) : (
             <div
               style={{
-                marginTop: "30px",
-                padding: "20px 24px",
-                borderRadius: "16px",
+                marginTop:
+                  "30px",
+                padding:
+                  "20px 24px",
+                borderRadius:
+                  "16px",
                 border:
                   "1px solid rgba(0,0,0,0.08)",
-                background: "#fafafa",
+                background:
+                  "#fafafa",
               }}
             >
               <h2
                 style={{
-                  marginBottom: "8px",
+                  marginBottom:
+                    "8px",
                 }}
               >
                 Want to book this accommodation?
@@ -767,23 +1180,49 @@ export default function PropertyDetailsPage() {
               <p
                 style={{
                   margin: 0,
-                  color: "#666",
+                  color:
+                    "#666",
+                  lineHeight:
+                    "1.6",
                 }}
               >
-                Please sign in with a student
-                account to book and pay for
+                Please sign in
+                with a student
+                account to
+                book and pay
+                for
                 accommodation.
               </p>
+
+              {!user && (
+                <button
+                  type="button"
+                  className="details-primary-button"
+                  onClick={() =>
+                    router.push(
+                      "/login"
+                    )
+                  }
+                  style={{
+                    marginTop:
+                      "16px",
+                  }}
+                >
+                  Log In
+                </button>
+              )}
             </div>
           )}
 
           {/* ACTIONS */}
 
           <div className="property-actions">
-
             <button
               className="details-secondary-button"
-              onClick={toggleSave}
+              type="button"
+              onClick={
+                toggleSave
+              }
             >
               {saved
                 ? "♥ Saved Property"
@@ -792,15 +1231,16 @@ export default function PropertyDetailsPage() {
 
             <button
               className="details-secondary-button"
+              type="button"
               onClick={() =>
-                router.push("/#housing")
+                router.push(
+                  "/#housing"
+                )
               }
             >
               Find More Housing
             </button>
-
           </div>
-
         </div>
       </section>
     </main>

@@ -23,6 +23,17 @@ export default function Home() {
   const [loadingProperties, setLoadingProperties] =
     useState(true);
 
+  // Search filters
+  const [selectedUniversity, setSelectedUniversity] =
+    useState("");
+  const [selectedRoomType, setSelectedRoomType] =
+    useState("");
+  const [maxPrice, setMaxPrice] = useState("");
+  const [availableOnly, setAvailableOnly] =
+    useState(false);
+  const [searchActive, setSearchActive] =
+    useState(false);
+
   useEffect(() => {
     async function loadData() {
       const {
@@ -252,6 +263,74 @@ export default function Home() {
     }
   }
 
+  function handleSearch() {
+    setSearchActive(true);
+
+    setTimeout(() => {
+      document
+        .getElementById("housing")
+        ?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+    }, 50);
+  }
+
+  function clearSearch() {
+    setSelectedUniversity("");
+    setSelectedRoomType("");
+    setMaxPrice("");
+    setAvailableOnly(false);
+    setSearchActive(false);
+  }
+
+  const filteredProperties =
+    properties.filter((property) => {
+      const universityMatch =
+        !searchActive ||
+        !selectedUniversity ||
+        String(
+          property.university ?? ""
+        ).toLowerCase() ===
+          selectedUniversity.toLowerCase();
+
+      const roomTypeMatch =
+        !searchActive ||
+        !selectedRoomType ||
+        String(
+          property.room_type ?? ""
+        ).toLowerCase() ===
+          selectedRoomType.toLowerCase();
+
+      const price = Number(
+        property.display_price ??
+          property.price
+      );
+
+      const priceMatch =
+        !searchActive ||
+        !maxPrice ||
+        (Number.isFinite(price) &&
+          price <= Number(maxPrice));
+
+      const spaces = Number(
+        property.spaces
+      );
+
+      const availabilityMatch =
+        !searchActive ||
+        !availableOnly ||
+        (Number.isFinite(spaces) &&
+          spaces > 0);
+
+      return (
+        universityMatch &&
+        roomTypeMatch &&
+        priceMatch &&
+        availabilityMatch
+      );
+    });
+
   return (
     <main>
       <nav>
@@ -320,66 +399,129 @@ export default function Home() {
         </p>
 
         <div className="search-box">
-          <select defaultValue="">
-            <option
-              value=""
-              disabled
-            >
+          <select
+            value={selectedUniversity}
+            onChange={(e) =>
+              setSelectedUniversity(
+                e.target.value
+              )
+            }
+          >
+            <option value="">
               Select University
             </option>
 
-            <option>
+            <option value="UPSA">
               UPSA
             </option>
 
-            <option>
+            <option value="University of Ghana">
               University of Ghana
             </option>
 
-            <option>
+            <option value="KNUST">
               KNUST
             </option>
 
-            <option>
+            <option value="University of Cape Coast">
               University of Cape Coast
+            </option>
+
+            <option value="Accra Technical University">
+              Accra Technical University
+            </option>
+
+            <option value="GIMPA">
+              GIMPA
             </option>
           </select>
 
-          <select defaultValue="">
-            <option
-              value=""
-              disabled
-            >
+          <select
+            value={selectedRoomType}
+            onChange={(e) =>
+              setSelectedRoomType(
+                e.target.value
+              )
+            }
+          >
+            <option value="">
               Room Type
             </option>
 
-            <option>
+            <option value="Single Room">
               Single Room
             </option>
 
-            <option>
+            <option value="2 in a Room">
               2 in a Room
             </option>
 
-            <option>
+            <option value="4 in a Room">
               4 in a Room
             </option>
 
-            <option>
+            <option value="6 in a Room">
               6 in a Room
             </option>
           </select>
 
-          <button>
+          <input
+            type="number"
+            min="0"
+            placeholder="Max price (GH₵)"
+            value={maxPrice}
+            onChange={(e) =>
+              setMaxPrice(
+                e.target.value
+              )
+            }
+          />
+
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              whiteSpace: "nowrap",
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={availableOnly}
+              onChange={(e) =>
+                setAvailableOnly(
+                  e.target.checked
+                )
+              }
+            />
+
+            Available only
+          </label>
+
+          <button
+            onClick={handleSearch}
+          >
             Search Housing
           </button>
+
+          {searchActive && (
+            <button
+              onClick={clearSearch}
+              type="button"
+            >
+              Clear Search
+            </button>
+          )}
         </div>
       </section>
 
       <section id="housing">
         <div className="section-heading">
           <p>
-            FEATURED ACCOMMODATION
+            {searchActive
+              ? "SEARCH RESULTS"
+              : "FEATURED ACCOMMODATION"}
           </p>
 
           <h2>
@@ -387,9 +529,14 @@ export default function Home() {
           </h2>
 
           <span>
-            Explore accommodation options
-            near your university and find a
-            room that fits your budget.
+            {searchActive
+              ? `${filteredProperties.length} ${
+                  filteredProperties.length ===
+                  1
+                    ? "property"
+                    : "properties"
+                } found`
+              : "Explore accommodation options near your university and find a room that fits your budget."}
           </span>
         </div>
 
@@ -397,15 +544,26 @@ export default function Home() {
           <p>
             Loading accommodation...
           </p>
-        ) : properties.length ===
+        ) : filteredProperties.length ===
           0 ? (
-          <p>
-            No approved accommodation is
-            available yet.
-          </p>
+          <div>
+            <p>
+              No accommodation matches
+              your search.
+            </p>
+
+            {searchActive && (
+              <button
+                onClick={clearSearch}
+                className="view-all-button"
+              >
+                Clear Search
+              </button>
+            )}
+          </div>
         ) : (
           <div className="property-grid">
-            {properties.map(
+            {filteredProperties.map(
               (property) => {
                 const isSaved =
                   savedProperties.includes(
@@ -650,9 +808,25 @@ export default function Home() {
           </div>
         )}
 
-        <button className="view-all-button">
-          View All Accommodation
-        </button>
+        {!searchActive &&
+          filteredProperties.length >
+            0 && (
+            <button
+              className="view-all-button"
+              onClick={() => {
+                document
+                  .getElementById(
+                    "housing"
+                  )
+                  ?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  });
+              }}
+            >
+              View All Accommodation
+            </button>
+          )}
       </section>
 
       <section id="about">

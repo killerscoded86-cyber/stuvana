@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -17,89 +17,114 @@ export default function AddPropertyPage() {
   const [walkingMinutes, setWalkingMinutes] = useState("");
   const [description, setDescription] = useState("");
 
-  const [latitude, setLatitude] = useState<number | null>(null);
-  const [longitude, setLongitude] = useState<number | null>(null);
-  const [locationAccuracy, setLocationAccuracy] =
-    useState<number | null>(null);
-  const [gettingLocation, setGettingLocation] =
-    useState(false);
-
   const [photos, setPhotos] = useState<File[]>([]);
   const [video, setVideo] = useState<File | null>(null);
 
   const [loading, setLoading] = useState(false);
+  const [checkingVerification, setCheckingVerification] =
+    useState(true);
+  const [verificationStatus, setVerificationStatus] =
+    useState("unverified");
 
-  function usePreciseLocation() {
-    if (!navigator.geolocation) {
-      alert(
-        "Your browser does not support location services."
-      );
-      return;
-    }
+  useEffect(() => {
+    async function checkOwnerVerification() {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
 
-    setGettingLocation(true);
+        if (!user) {
+          router.push("/login");
+          return;
+        }
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const currentLatitude =
-          position.coords.latitude;
+        const {
+          data: profile,
+          error: profileError,
+        } = await supabase
+          .from("profiles")
+          .select(
+            "account_type, verification_status, profile_photo_url"
+          )
+          .eq("id", user.id)
+          .single();
 
-        const currentLongitude =
-          position.coords.longitude;
+        if (profileError || !profile) {
+          console.error(
+            "Verification profile lookup error:",
+            profileError
+          );
 
-        setLatitude(currentLatitude);
-        setLongitude(currentLongitude);
-        setLocationAccuracy(
-          position.coords.accuracy
-        );
+          alert(
+            "Your account profile could not be verified. Please contact STUVANA support."
+          );
 
-        setGettingLocation(false);
-      },
-      (error) => {
+          router.push("/dashboard");
+          return;
+        }
+
+        if (profile.account_type !== "owner") {
+          alert(
+            "Only property owners can add properties."
+          );
+
+          router.push("/dashboard");
+          return;
+        }
+
+        const status = String(
+          profile.verification_status ||
+            "unverified"
+        ).toLowerCase();
+
+        setVerificationStatus(status);
+
+        if (
+          status !== "verified" ||
+          !profile.profile_photo_url
+        ) {
+          alert(
+            "Identity verification is required before you can upload a property."
+          );
+
+          router.push("/owner/verification");
+          return;
+        }
+      } catch (error) {
         console.error(
-          "Location error:",
+          "Owner verification check error:",
           error
         );
 
-        setGettingLocation(false);
+        alert(
+          "Could not verify your owner account status."
+        );
 
-        if (error.code === 1) {
-          alert(
-            "Location permission was denied. Please allow location access in your browser and try again."
-          );
-        } else if (error.code === 2) {
-          alert(
-            "Your location could not be determined. Please try again."
-          );
-        } else {
-          alert(
-            "Unable to get your precise location. Please try again."
-          );
-        }
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
+        router.push("/dashboard");
+      } finally {
+        setCheckingVerification(false);
       }
-    );
-  }
+    }
+
+    checkOwnerVerification();
+  }, [router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    if (!name || !location || !roomType || !price || !spaces) {
-      alert("Please fill in all required fields.");
+    if (
+      verificationStatus !== "verified"
+    ) {
+      alert(
+        "You must complete identity verification before uploading a property."
+      );
+
+      router.push("/owner/verification");
       return;
     }
 
-    if (
-      latitude === null ||
-      longitude === null
-    ) {
-      alert(
-        "Please select the property's precise location on the map before submitting."
-      );
+    if (!name || !location || !roomType || !price || !spaces) {
+      alert("Please fill in all required fields.");
       return;
     }
 
@@ -107,6 +132,18 @@ export default function AddPropertyPage() {
 
     if (!Number.isFinite(basePrice) || basePrice <= 0) {
       alert("Please enter a valid property price.");
+      return;
+    }
+
+    const availableSpaces = Number(spaces);
+
+    if (
+      !Number.isInteger(availableSpaces) ||
+      availableSpaces <= 0
+    ) {
+      alert(
+        "Please enter a valid number of available spaces."
+      );
       return;
     }
 
@@ -123,16 +160,53 @@ export default function AddPropertyPage() {
         return;
       }
 
-      // Check account type
-      const { data: profile, error: profileError } =
-        await supabase
-          .from("profiles")
-          .select("account_type")
-          .eq("id", user.id)
-          .single();
+      /*
+       * Re-check owner verification immediately before
+       * creating the property.
+       */
+      const {
+        data: profile,
+        error: profileError,
+      } = await supabase
+        .from("profiles")
+        .select(
+          "account_type, verification_status, profile_photo_url"
+        )
+        .eq("id", user.id)
+        .single();
 
-      if (profileError || profile?.account_type !== "owner") {
-        alert("Only property owners can add properties.");
+      if (profileError || !profile) {
+        alert(
+          "Your account profile could not be found."
+        );
+
+        return;
+      }
+
+      if (profile.account_type !== "owner") {
+        alert(
+          "Only property owners can add properties."
+        );
+
+        return;
+      }
+
+      const currentVerificationStatus =
+        String(
+          profile.verification_status ||
+            "unverified"
+        ).toLowerCase();
+
+      if (
+        currentVerificationStatus !==
+          "verified" ||
+        !profile.profile_photo_url
+      ) {
+        alert(
+          "Your identity verification is incomplete. You cannot upload properties yet."
+        );
+
+        router.push("/owner/verification");
         return;
       }
 
@@ -140,23 +214,26 @@ export default function AddPropertyPage() {
       // CALCULATE FINAL STUDENT DISPLAY PRICE
       // =====================================================
 
+      // Paystack Ghana local transaction fee
       const paystackFeeRate = 0.0195;
 
-      const basePricePesewas =
-        Math.round(basePrice * 100);
+      // Convert owner's price to pesewas
+      const basePricePesewas = Math.round(
+        basePrice * 100
+      );
 
+      // Gross up the price so the Paystack processing fee
+      // is covered without reducing the owner's listed price.
       const displayPricePesewas = Math.ceil(
         basePricePesewas /
           (1 - paystackFeeRate)
       );
 
+      // Final price shown to students
       const displayPrice =
         displayPricePesewas / 100;
 
-      // =====================================================
-      // 1. CREATE PROPERTY
-      // =====================================================
-
+      // 1. Create the property first
       const {
         data: property,
         error: propertyError,
@@ -166,24 +243,24 @@ export default function AddPropertyPage() {
           name,
           location,
           room_type: roomType,
+
+          // Original price set by the owner
           price: basePrice,
+
+          // Final price students see
           display_price: displayPrice,
+
           period,
-          spaces: Number(spaces),
-          university: university || null,
-          description: description || null,
+          spaces: availableSpaces,
+          university:
+            university || null,
+          description:
+            description || null,
           walking_minutes: walkingMinutes
             ? Number(walkingMinutes)
             : null,
           owner_id: user.id,
           image_url: null,
-
-          // New properties must wait for admin approval.
-          status: "pending",
-
-          // Precise property location.
-          latitude,
-          longitude,
         })
         .select()
         .single();
@@ -202,11 +279,12 @@ export default function AddPropertyPage() {
         sort_order: number;
       }[] = [];
 
-      // =====================================================
-      // 2. UPLOAD PHOTOS
-      // =====================================================
-
-      for (let i = 0; i < photos.length; i++) {
+      // 2. Upload photos
+      for (
+        let i = 0;
+        i < photos.length;
+        i++
+      ) {
         const photo = photos[i];
 
         const fileExt =
@@ -215,24 +293,29 @@ export default function AddPropertyPage() {
             .pop()
             ?.toLowerCase() || "jpg";
 
-        const fileName = `${user.id}/${propertyId}/images/${crypto.randomUUID()}.${fileExt}`;
+        const fileName =
+          `${user.id}/${propertyId}/images/${crypto.randomUUID()}.${fileExt}`;
 
-        const { error: uploadError } =
-          await supabase.storage
-            .from("property-media")
-            .upload(
-              fileName,
-              photo
-            );
+        const {
+          error: uploadError,
+        } = await supabase.storage
+          .from("property-media")
+          .upload(
+            fileName,
+            photo
+          );
 
         if (uploadError) {
           throw uploadError;
         }
 
-        const { data: publicData } =
-          supabase.storage
-            .from("property-media")
-            .getPublicUrl(fileName);
+        const {
+          data: publicData,
+        } = supabase.storage
+          .from("property-media")
+          .getPublicUrl(
+            fileName
+          );
 
         mediaRows.push({
           property_id: propertyId,
@@ -244,10 +327,7 @@ export default function AddPropertyPage() {
         });
       }
 
-      // =====================================================
-      // 3. UPLOAD VIDEO
-      // =====================================================
-
+      // 3. Upload video
       if (video) {
         const fileExt =
           video.name
@@ -255,24 +335,29 @@ export default function AddPropertyPage() {
             .pop()
             ?.toLowerCase() || "mp4";
 
-        const fileName = `${user.id}/${propertyId}/videos/${crypto.randomUUID()}.${fileExt}`;
+        const fileName =
+          `${user.id}/${propertyId}/videos/${crypto.randomUUID()}.${fileExt}`;
 
-        const { error: videoError } =
-          await supabase.storage
-            .from("property-media")
-            .upload(
-              fileName,
-              video
-            );
+        const {
+          error: videoError,
+        } = await supabase.storage
+          .from("property-media")
+          .upload(
+            fileName,
+            video
+          );
 
         if (videoError) {
           throw videoError;
         }
 
-        const { data: publicData } =
-          supabase.storage
-            .from("property-media")
-            .getPublicUrl(fileName);
+        const {
+          data: publicData,
+        } = supabase.storage
+          .from("property-media")
+          .getPublicUrl(
+            fileName
+          );
 
         mediaRows.push({
           property_id: propertyId,
@@ -280,51 +365,52 @@ export default function AddPropertyPage() {
           storage_path: fileName,
           public_url:
             publicData.publicUrl,
-          sort_order: photos.length,
+          sort_order:
+            photos.length,
         });
       }
 
-      // =====================================================
-      // 4. SAVE ALL MEDIA RECORDS
-      // =====================================================
-
+      // 4. Save all media records
       if (mediaRows.length > 0) {
-        const { error: mediaError } =
-          await supabase
-            .from("property_media")
-            .insert(mediaRows);
+        const {
+          error: mediaError,
+        } = await supabase
+          .from("property_media")
+          .insert(
+            mediaRows
+          );
 
         if (mediaError) {
           throw mediaError;
         }
       }
 
-      // =====================================================
-      // 5. FIRST UPLOADED PHOTO = COVER PHOTO
-      // =====================================================
-
+      // 5. Set the first photo as the property's main image
       if (
         photos.length > 0 &&
         mediaRows.length > 0
       ) {
-        const firstUploadedPhoto =
+        const firstImage =
           mediaRows.find(
             (media) =>
               media.media_type ===
               "image"
           );
 
-        if (firstUploadedPhoto) {
+        if (firstImage) {
           const {
-            error: imageUpdateError,
+            error:
+              imageUpdateError,
           } = await supabase
             .from("properties")
             .update({
               image_url:
-                firstUploadedPhoto.public_url,
+                firstImage.public_url,
             })
-            .eq("id", propertyId)
-            .eq("owner_id", user.id);
+            .eq(
+              "id",
+              propertyId
+            );
 
           if (imageUpdateError) {
             throw imageUpdateError;
@@ -332,15 +418,15 @@ export default function AddPropertyPage() {
         }
       }
 
-      // =====================================================
-      // 6. PROPERTY SUBMITTED FOR ADMIN APPROVAL
-      // =====================================================
-
       alert(
-        "Property submitted successfully! Your listing is now pending admin approval."
+        video
+          ? "Property, photos and video uploaded successfully!"
+          : "Property and photos uploaded successfully!"
       );
 
-      router.push("/owner/dashboard");
+      router.push(
+        `/property/${propertyId}`
+      );
     } catch (error: any) {
       console.error(
         "Add property error:",
@@ -356,11 +442,105 @@ export default function AddPropertyPage() {
     }
   }
 
-  const mapEmbedUrl =
-    latitude !== null &&
-    longitude !== null
-      ? `https://www.openstreetmap.org/export/embed.html?bbox=${longitude - 0.005}%2C${latitude - 0.005}%2C${longitude + 0.005}%2C${latitude + 0.005}&layer=mapnik&marker=${latitude}%2C${longitude}`
-      : null;
+  if (checkingVerification) {
+    return (
+      <main className="dashboard-page">
+        <nav className="dashboard-nav">
+          <a
+            href="/"
+            className="logo"
+          >
+            STUVANA
+          </a>
+
+          <button
+            onClick={() =>
+              router.push(
+                "/dashboard"
+              )
+            }
+          >
+            ← Dashboard
+          </button>
+        </nav>
+
+        <section className="dashboard-header">
+          <p className="hero-label">
+            PROPERTY OWNER
+          </p>
+
+          <h1>
+            Checking verification...
+          </h1>
+
+          <p>
+            Please wait while STUVANA
+            checks your owner
+            verification status.
+          </p>
+        </section>
+      </main>
+    );
+  }
+
+  if (
+    verificationStatus !==
+    "verified"
+  ) {
+    return (
+      <main className="dashboard-page">
+        <nav className="dashboard-nav">
+          <a
+            href="/"
+            className="logo"
+          >
+            STUVANA
+          </a>
+
+          <button
+            onClick={() =>
+              router.push(
+                "/dashboard"
+              )
+            }
+          >
+            ← Dashboard
+          </button>
+        </nav>
+
+        <section className="dashboard-header">
+          <p className="hero-label">
+            PROPERTY OWNER
+          </p>
+
+          <h1>
+            Verification Required
+          </h1>
+
+          <p>
+            You must complete identity
+            verification before you can
+            upload a property.
+          </p>
+
+          <button
+            type="button"
+            className="details-primary-button"
+            onClick={() =>
+              router.push(
+                "/owner/verification"
+              )
+            }
+            style={{
+              marginTop: "20px",
+            }}
+          >
+            Verify My Identity
+          </button>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className="dashboard-page">
@@ -374,7 +554,9 @@ export default function AddPropertyPage() {
 
         <button
           onClick={() =>
-            router.push("/dashboard")
+            router.push(
+              "/dashboard"
+            )
           }
         >
           ← Dashboard
@@ -383,14 +565,14 @@ export default function AddPropertyPage() {
 
       <section className="dashboard-header">
         <p className="hero-label">
-          PROPERTY OWNER
+          VERIFIED PROPERTY OWNER
         </p>
 
         <h1>Add Property</h1>
 
         <p>
-          Submit your student accommodation
-          for admin review.
+          List your student accommodation
+          on STUVANA.
         </p>
       </section>
 
@@ -400,7 +582,9 @@ export default function AddPropertyPage() {
           onSubmit={handleSubmit}
         >
           <div className="form-section">
-            <h2>Property Information</h2>
+            <h2>
+              Property Information
+            </h2>
 
             <label>
               Property Name *
@@ -408,7 +592,9 @@ export default function AddPropertyPage() {
                 type="text"
                 value={name}
                 onChange={(e) =>
-                  setName(e.target.value)
+                  setName(
+                    e.target.value
+                  )
                 }
                 placeholder="e.g. Madina Student Hostel"
                 required
@@ -421,7 +607,9 @@ export default function AddPropertyPage() {
                 type="text"
                 value={location}
                 onChange={(e) =>
-                  setLocation(e.target.value)
+                  setLocation(
+                    e.target.value
+                  )
                 }
                 placeholder="e.g. Madina, Accra"
                 required
@@ -448,7 +636,9 @@ export default function AddPropertyPage() {
                 <input
                   type="number"
                   min="1"
-                  value={walkingMinutes}
+                  value={
+                    walkingMinutes
+                  }
                   onChange={(e) =>
                     setWalkingMinutes(
                       e.target.value
@@ -466,145 +656,6 @@ export default function AddPropertyPage() {
 
           <div className="form-section">
             <h2>
-              Precise Property Location
-            </h2>
-
-            <p className="upload-help">
-              Use your device's precise location
-              to mark the exact position of the
-              property on the map.
-            </p>
-
-            <button
-              type="button"
-              onClick={usePreciseLocation}
-              disabled={gettingLocation}
-              className="details-secondary-button"
-              style={{
-                marginBottom:
-                  "16px",
-                cursor: gettingLocation
-                  ? "not-allowed"
-                  : "pointer",
-              }}
-            >
-              {gettingLocation
-                ? "Getting Precise Location..."
-                : "📍 Use My Precise Location"}
-            </button>
-
-            {latitude !== null &&
-              longitude !== null && (
-                <div
-                  style={{
-                    marginBottom:
-                      "16px",
-                    padding:
-                      "14px",
-                    borderRadius:
-                      "10px",
-                    background:
-                      "#f0fdf4",
-                    border:
-                      "1px solid #bbf7d0",
-                  }}
-                >
-                  <strong>
-                    Property location selected
-                  </strong>
-
-                  <p
-                    style={{
-                      margin:
-                        "6px 0 0",
-                      fontSize:
-                        "14px",
-                    }}
-                  >
-                    Latitude:{" "}
-                    {latitude.toFixed(
-                      6
-                    )}
-                    <br />
-                    Longitude:{" "}
-                    {longitude.toFixed(
-                      6
-                    )}
-                  </p>
-
-                  {locationAccuracy !==
-                    null && (
-                    <p
-                      style={{
-                        margin:
-                          "6px 0 0",
-                        fontSize:
-                          "13px",
-                      }}
-                    >
-                      GPS accuracy:
-                      {" "}
-                      approximately{" "}
-                      {Math.round(
-                        locationAccuracy
-                      )}
-                      m
-                    </p>
-                  )}
-                </div>
-              )}
-
-            {mapEmbedUrl ? (
-              <div
-                style={{
-                  width: "100%",
-                  overflow:
-                    "hidden",
-                  borderRadius:
-                    "12px",
-                  border:
-                    "1px solid #e5e7eb",
-                }}
-              >
-                <iframe
-                  title="Property location map"
-                  src={mapEmbedUrl}
-                  style={{
-                    width: "100%",
-                    height: "350px",
-                    border: 0,
-                  }}
-                  loading="lazy"
-                />
-              </div>
-            ) : (
-              <div
-                style={{
-                  width: "100%",
-                  height: "220px",
-                  borderRadius:
-                    "12px",
-                  background:
-                    "#f3f4f6",
-                  display: "flex",
-                  alignItems:
-                    "center",
-                  justifyContent:
-                    "center",
-                  textAlign: "center",
-                  padding: "20px",
-                  color: "#6b7280",
-                }}
-              >
-                Your precise property
-                location will appear
-                here after you select it.
-              </div>
-            )}
-          </div>
-
-          <div className="form-section">
-            <h2>
               Room & Pricing
             </h2>
 
@@ -613,7 +664,9 @@ export default function AddPropertyPage() {
               <select
                 value={roomType}
                 onChange={(e) =>
-                  setRoomType(e.target.value)
+                  setRoomType(
+                    e.target.value
+                  )
                 }
                 required
               >
@@ -629,20 +682,12 @@ export default function AddPropertyPage() {
                   2 in a Room
                 </option>
 
-                <option value="3 in a Room">
-                  3 in a Room
-                </option>
-
                 <option value="4 in a Room">
                   4 in a Room
                 </option>
 
-                <option value="5 in a Room">
-                  5 in a Room
-                </option>
-
-                <option value="Apartment">
-                  Apartment
+                <option value="6 in a Room">
+                  6 in a Room
                 </option>
               </select>
             </label>
@@ -655,7 +700,9 @@ export default function AddPropertyPage() {
                 step="0.01"
                 value={price}
                 onChange={(e) =>
-                  setPrice(e.target.value)
+                  setPrice(
+                    e.target.value
+                  )
                 }
                 placeholder="8500"
                 required
@@ -664,9 +711,9 @@ export default function AddPropertyPage() {
 
             <p className="upload-help">
               STUVANA will automatically
-              include payment processing costs
-              in the final price shown to
-              students.
+              include payment processing
+              costs in the final price
+              shown to students.
             </p>
 
             <label>
@@ -674,7 +721,9 @@ export default function AddPropertyPage() {
               <select
                 value={period}
                 onChange={(e) =>
-                  setPeriod(e.target.value)
+                  setPeriod(
+                    e.target.value
+                  )
                 }
               >
                 <option value="Per Semester">
@@ -698,7 +747,9 @@ export default function AddPropertyPage() {
                 min="1"
                 value={spaces}
                 onChange={(e) =>
-                  setSpaces(e.target.value)
+                  setSpaces(
+                    e.target.value
+                  )
                 }
                 placeholder="5"
                 required
@@ -730,10 +781,9 @@ export default function AddPropertyPage() {
 
             <p className="upload-help">
               Upload photos of the rooms,
-              exterior, kitchen, bathroom,
-              surroundings, etc. The first
-              photo you select will be used as
-              the property's cover photo.
+              exterior, kitchen,
+              bathroom, surroundings,
+              etc.
             </p>
 
             <input
@@ -743,7 +793,8 @@ export default function AddPropertyPage() {
               onChange={(e) => {
                 setPhotos(
                   Array.from(
-                    e.target.files || []
+                    e.target.files ||
+                      []
                   )
                 );
               }}
@@ -755,9 +806,7 @@ export default function AddPropertyPage() {
                 {photos.length > 1
                   ? "s"
                   : ""}{" "}
-                selected. The first
-                selected photo will be the
-                cover photo.
+                selected
               </p>
             )}
           </div>
@@ -768,8 +817,8 @@ export default function AddPropertyPage() {
             </h2>
 
             <p className="upload-help">
-              Optional. Upload a video tour
-              of the property.
+              Optional. Upload a video
+              tour of the property.
             </p>
 
             <input
@@ -791,14 +840,33 @@ export default function AddPropertyPage() {
             )}
           </div>
 
+          <div
+            style={{
+              marginBottom: "16px",
+              padding: "14px 16px",
+              borderRadius: "12px",
+              background: "#f0fdf4",
+              border:
+                "1px solid #bbf7d0",
+              color: "#166534",
+              fontSize: "14px",
+              lineHeight: 1.5,
+            }}
+          >
+            ✓ Your STUVANA owner
+            identity is verified. You
+            are allowed to submit
+            properties for admin review.
+          </div>
+
           <button
             type="submit"
             className="add-property-submit"
             disabled={loading}
           >
             {loading
-              ? "Submitting Property..."
-              : "Submit for Approval"}
+              ? "Uploading Property..."
+              : "Publish Property"}
           </button>
         </form>
       </section>

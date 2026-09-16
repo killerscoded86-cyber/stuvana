@@ -587,6 +587,11 @@
   resolved "https://registry.yarnpkg.com/@stablelib/base64/-/base64-1.0.1.tgz#bdfc1c6d3a62d7a3b7bbc65b6cce1bb4561641be"
   integrity sha512-1bnPQqSxSuc3Ii6MhBysoWCg58j97aUjuCSZrGSmDxNqtytIi0k8utUenAwTZN4V5mXXYGsVUI9zeBqy+jBOSQ==
 
+"@sumsub/websdk-react@^2.9.0":
+  version "2.9.0"
+  resolved "https://registry.yarnpkg.com/@sumsub/websdk-react/-/websdk-react-2.9.0.tgz#e400a6d28d1b3b42aaa7067d8cd5f7c7b0852218"
+  integrity sha512-oLuEjDBYv+lk4hLe0NlPBrTrqwBMn+Rl4s0fHZ2zIihPTxyzHzN2lv8xwXAidG/a59MJ0Q0BrChKfgyp9tAD/A==
+
 "@supabase/auth-js@2.116.0":
   version "2.116.0"
   resolved "https://registry.yarnpkg.com/@supabase/auth-js/-/auth-js-2.116.0.tgz#3dcbcb35dc70c550c76345b749bb93ef4ce53007"

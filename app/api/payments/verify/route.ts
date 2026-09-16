@@ -93,6 +93,102 @@ async function createOwnerNotification({
   }
 }
 
+/*
+ * =====================================================
+ * STUDENT NOTIFICATION
+ * =====================================================
+ */
+async function createStudentNotification({
+  studentId,
+  propertyId,
+  bookingId,
+  type,
+  title,
+  message,
+}: {
+  studentId: string;
+  propertyId: number;
+  bookingId?: number | null;
+  type: string;
+  title: string;
+  message: string;
+}) {
+  try {
+    /*
+     * Prevent duplicate notifications for the same
+     * student + booking + notification type.
+     */
+    let query = supabaseAdmin
+      .from("student_notifications")
+      .select("id")
+      .eq("student_id", studentId)
+      .eq("property_id", propertyId)
+      .eq("type", type)
+      .limit(1);
+
+    if (bookingId) {
+      query = query.eq(
+        "booking_id",
+        bookingId
+      );
+    } else {
+      query = query.is(
+        "booking_id",
+        null
+      );
+    }
+
+    const {
+      data: existingNotification,
+      error: existingError,
+    } = await query.maybeSingle();
+
+    if (existingError) {
+      console.error(
+        "Student notification duplicate check error:",
+        existingError
+      );
+
+      return;
+    }
+
+    if (existingNotification) {
+      return;
+    }
+
+    const {
+      error: notificationError,
+    } = await supabaseAdmin
+      .from("student_notifications")
+      .insert({
+        student_id: studentId,
+        property_id: propertyId,
+        booking_id:
+          bookingId || null,
+        type,
+        title,
+        message,
+        is_read: false,
+      });
+
+    if (notificationError) {
+      console.error(
+        "Student notification creation error:",
+        notificationError
+      );
+    }
+  } catch (error) {
+    /*
+     * Notification failure must never cancel
+     * a successful payment.
+     */
+    console.error(
+      "Student notification exception:",
+      error
+    );
+  }
+}
+
 async function createBookingNotifications({
   booking,
   property,
@@ -105,25 +201,87 @@ async function createBookingNotifications({
   remainingSpaces: number;
 }) {
   /*
-   * Always create a new booking notification.
+   * =====================================================
+   * OWNER BOOKING NOTIFICATION
+   * =====================================================
+   *
+   * Financial structure:
+   *
+   * total_amount = amount paid by student
+   * payment_processing_fee = Paystack charge
+   * amount = property amount before STUVANA commission
+   * commission_amount = STUVANA commission
+   * owner_amount = amount - commission
+   *
+   * Paystack charges are NOT deducted from the
+   * owner's property amount.
    */
+  const studentPaid =
+    Number(
+      booking.total_amount || 0
+    );
+
+  const paystackCharges =
+    Number(
+      booking.payment_processing_fee || 0
+    );
+
+  const propertyAmount =
+    Number(
+      booking.amount || 0
+    );
+
+  const stuvanaCommission =
+    Number(
+      booking.commission_amount || 0
+    );
+
+  const ownerReceives =
+    Number(
+      booking.owner_amount ??
+        propertyAmount -
+          stuvanaCommission
+    );
+
   await createOwnerNotification({
     ownerId: booking.owner_id,
     propertyId: booking.property_id,
     bookingId: booking.id,
     type: "booking_paid",
-    title: "New student booking",
+    title: "New student booking 🎉",
     message:
       `${studentName} has successfully paid for ${property.name}. ` +
-      `Amount paid: GH₵ ${Number(
-        booking.total_amount
-      ).toLocaleString()}. ` +
+      `Student paid: GH₵ ${studentPaid.toLocaleString()}. ` +
+      `Property amount: GH₵ ${propertyAmount.toLocaleString()}. ` +
+      `Paystack charges: GH₵ ${paystackCharges.toLocaleString()} (exempted from your earnings). ` +
+      `STUVANA commission deducted: GH₵ ${stuvanaCommission.toLocaleString()}. ` +
+      `Your earnings: GH₵ ${ownerReceives.toLocaleString()}. ` +
       `Remaining spaces: ${remainingSpaces}.`,
   });
 
   /*
-   * Create a second notification only when the
-   * property has become fully booked.
+   * =====================================================
+   * STUDENT BOOKING NOTIFICATION
+   * =====================================================
+   *
+   * Student continues to see the full amount they paid.
+   */
+  await createStudentNotification({
+    studentId: booking.student_id,
+    propertyId: booking.property_id,
+    bookingId: booking.id,
+    type: "booking_confirmed",
+    title: "Booking Confirmed 🎉",
+    message:
+      `Your booking at ${property.name} has been confirmed successfully. ` +
+      `Amount paid: GH₵ ${studentPaid.toLocaleString()}. ` +
+      `Your accommodation allocation is now confirmed.`,
+  });
+
+  /*
+   * =====================================================
+   * PROPERTY FULL NOTIFICATION FOR OWNER
+   * =====================================================
    */
   if (remainingSpaces <= 0) {
     await createOwnerNotification({
@@ -265,10 +423,6 @@ export async function POST(request: Request) {
      * =====================================================
      * OLD PAID BOOKING
      * =====================================================
-     *
-     * This handles a booking that was already marked
-     * paid before the space-reduction/notification
-     * system was installed.
      */
     if (
       booking.status === "paid" &&
@@ -929,7 +1083,7 @@ export async function POST(request: Request) {
 
     /*
      * =====================================================
-     * CREATE OWNER DASHBOARD NOTIFICATIONS
+     * CREATE OWNER + STUDENT DASHBOARD NOTIFICATIONS
      * =====================================================
      */
     const {
@@ -1037,6 +1191,37 @@ export async function POST(request: Request) {
               .RESEND_FROM_EMAIL ||
             "onboarding@resend.dev";
 
+          const studentPaid =
+            Number(
+              updatedBooking.total_amount ||
+                0
+            );
+
+          const paystackCharges =
+            Number(
+              updatedBooking.payment_processing_fee ||
+                0
+            );
+
+          const propertyAmount =
+            Number(
+              updatedBooking.amount ||
+                0
+            );
+
+          const stuvanaCommission =
+            Number(
+              updatedBooking.commission_amount ||
+                0
+            );
+
+          const ownerReceives =
+            Number(
+              updatedBooking.owner_amount ??
+                propertyAmount -
+                  stuvanaCommission
+            );
+
           const {
             error:
               resendError,
@@ -1080,14 +1265,38 @@ export async function POST(request: Request) {
                       ${university}
                     </p>
 
+                    <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 16px 0;" />
+
                     <p style="margin: 6px 0;">
-                      <strong>Amount paid:</strong>
-                      GH₵ ${Number(
-                        updatedBooking.total_amount
-                      ).toLocaleString()}
+                      <strong>Amount paid by student:</strong>
+                      GH₵ ${studentPaid.toLocaleString()}
                     </p>
 
                     <p style="margin: 6px 0;">
+                      <strong>Property amount:</strong>
+                      GH₵ ${propertyAmount.toLocaleString()}
+                    </p>
+
+                    <p style="margin: 6px 0;">
+                      <strong>Paystack charges:</strong>
+                      GH₵ ${paystackCharges.toLocaleString()}
+                    </p>
+
+                    <p style="margin: 6px 0; color: #166534;">
+                      <strong>Paystack charges are exempted from your earnings.</strong>
+                    </p>
+
+                    <p style="margin: 6px 0; color: #b45309;">
+                      <strong>STUVANA commission deducted:</strong>
+                      GH₵ ${stuvanaCommission.toLocaleString()}
+                    </p>
+
+                    <p style="margin: 12px 0 0; padding: 12px; background: #ecfdf5; border-radius: 10px; color: #166534; font-size: 18px;">
+                      <strong>Your earnings:</strong>
+                      GH₵ ${ownerReceives.toLocaleString()}
+                    </p>
+
+                    <p style="margin: 14px 0 6px;">
                       <strong>Remaining spaces:</strong>
                       ${remainingSpaces}
                     </p>
@@ -1095,6 +1304,16 @@ export async function POST(request: Request) {
                     <p style="margin: 6px 0;">
                       <strong>Booking reference:</strong>
                       ${updatedBooking.paystack_reference}
+                    </p>
+                  </div>
+
+                  <div style="padding: 14px 16px; background: #eff6ff; border-radius: 10px; color: #1e40af;">
+                    <strong>Payment breakdown</strong>
+                    <p style="margin: 6px 0 0;">
+                      Student payment includes the Paystack processing charge.
+                      That charge is not deducted from your property amount.
+                      STUVANA commission is deducted from the property amount
+                      shown above.
                     </p>
                   </div>
 
