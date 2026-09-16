@@ -15,7 +15,8 @@ type PropertyMedia = {
 export default function Home() {
   const [user, setUser] = useState<any>(null);
   const [properties, setProperties] = useState<any[]>([]);
-  const [savedProperties, setSavedProperties] = useState<number[]>([]);
+  const [savedProperties, setSavedProperties] =
+    useState<number[]>([]);
   const [propertyMedia, setPropertyMedia] = useState<
     Record<number, PropertyMedia[]>
   >({});
@@ -38,7 +39,9 @@ export default function Home() {
         .from("properties")
         .select("*")
         .eq("status", "approved")
-        .order("created_at", { ascending: false });
+        .order("created_at", {
+          ascending: false,
+        });
 
       if (propertiesError) {
         console.error(
@@ -46,15 +49,17 @@ export default function Home() {
           propertiesError
         );
       } else {
-        const loadedProperties = propertiesData || [];
+        const loadedProperties =
+          propertiesData || [];
 
         setProperties(loadedProperties);
 
         // Load photos and videos for approved properties
         if (loadedProperties.length > 0) {
-          const propertyIds = loadedProperties.map(
-            (property) => property.id
-          );
+          const propertyIds =
+            loadedProperties.map(
+              (property) => property.id
+            );
 
           const {
             data: mediaData,
@@ -62,7 +67,10 @@ export default function Home() {
           } = await supabase
             .from("property_media")
             .select("*")
-            .in("property_id", propertyIds)
+            .in(
+              "property_id",
+              propertyIds
+            )
             .order("sort_order", {
               ascending: true,
             });
@@ -78,15 +86,27 @@ export default function Home() {
               PropertyMedia[]
             > = {};
 
-            (mediaData || []).forEach((item) => {
-              if (!groupedMedia[item.property_id]) {
-                groupedMedia[item.property_id] = [];
+            (mediaData || []).forEach(
+              (item) => {
+                if (
+                  !groupedMedia[
+                    item.property_id
+                  ]
+                ) {
+                  groupedMedia[
+                    item.property_id
+                  ] = [];
+                }
+
+                groupedMedia[
+                  item.property_id
+                ].push(item);
               }
+            );
 
-              groupedMedia[item.property_id].push(item);
-            });
-
-            setPropertyMedia(groupedMedia);
+            setPropertyMedia(
+              groupedMedia
+            );
           }
         }
       }
@@ -99,7 +119,10 @@ export default function Home() {
         } = await supabase
           .from("saved_properties")
           .select("property_id")
-          .eq("user_id", user.id);
+          .eq(
+            "user_id",
+            user.id
+          );
 
         if (savedError) {
           console.error(
@@ -109,7 +132,8 @@ export default function Home() {
         } else {
           setSavedProperties(
             (savedData || []).map(
-              (item) => item.property_id
+              (item) =>
+                item.property_id
             )
           );
         }
@@ -122,13 +146,17 @@ export default function Home() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setUser(session?.user ?? null);
-      }
-    );
+    } =
+      supabase.auth.onAuthStateChange(
+        (_event, session) => {
+          setUser(
+            session?.user ?? null
+          );
+        }
+      );
 
-    return () => subscription.unsubscribe();
+    return () =>
+      subscription.unsubscribe();
   }, []);
 
   async function handleLogout() {
@@ -138,21 +166,37 @@ export default function Home() {
     setSavedProperties([]);
   }
 
-  async function toggleSave(propertyId: number) {
+  async function toggleSave(
+    propertyId: number
+  ) {
     if (!user) {
-      alert("Please log in to save properties.");
+      alert(
+        "Please log in to save properties."
+      );
+
       return;
     }
 
     const isSaved =
-      savedProperties.includes(propertyId);
+      savedProperties.includes(
+        propertyId
+      );
 
     if (isSaved) {
-      const { error } = await supabase
-        .from("saved_properties")
-        .delete()
-        .eq("user_id", user.id)
-        .eq("property_id", propertyId);
+      const { error } =
+        await supabase
+          .from(
+            "saved_properties"
+          )
+          .delete()
+          .eq(
+            "user_id",
+            user.id
+          )
+          .eq(
+            "property_id",
+            propertyId
+          );
 
       if (error) {
         console.error(
@@ -160,22 +204,31 @@ export default function Home() {
           error
         );
 
-        alert("Could not remove property.");
+        alert(
+          "Could not remove property."
+        );
+
         return;
       }
 
-      setSavedProperties((current) =>
-        current.filter(
-          (id) => id !== propertyId
-        )
+      setSavedProperties(
+        (current) =>
+          current.filter(
+            (id) =>
+              id !== propertyId
+          )
       );
     } else {
-      const { error } = await supabase
-        .from("saved_properties")
-        .insert({
-          user_id: user.id,
-          property_id: propertyId,
-        });
+      const { error } =
+        await supabase
+          .from(
+            "saved_properties"
+          )
+          .insert({
+            user_id: user.id,
+            property_id:
+              propertyId,
+          });
 
       if (error) {
         console.error(
@@ -183,14 +236,19 @@ export default function Home() {
           error
         );
 
-        alert("Could not save property.");
+        alert(
+          "Could not save property."
+        );
+
         return;
       }
 
-      setSavedProperties((current) => [
-        ...current,
-        propertyId,
-      ]);
+      setSavedProperties(
+        (current) => [
+          ...current,
+          propertyId,
+        ]
+      );
     }
   }
 
@@ -200,28 +258,46 @@ export default function Home() {
         <h1>STUVANA</h1>
 
         <div>
-          <a href="#home">Home</a>
-          <a href="#housing">Find Housing</a>
-          <a href="#about">About</a>
+          <a href="#home">
+            Home
+          </a>
+
+          <a href="#housing">
+            Find Housing
+          </a>
+
+          <a href="#about">
+            About
+          </a>
 
           {user ? (
             <>
               <a href="/dashboard">
-                <button>My Account</button>
+                <button>
+                  My Account
+                </button>
               </a>
 
-              <button onClick={handleLogout}>
+              <button
+                onClick={
+                  handleLogout
+                }
+              >
                 Log Out
               </button>
             </>
           ) : (
             <>
               <a href="/login">
-                <button>Log In</button>
+                <button>
+                  Log In
+                </button>
               </a>
 
               <a href="/signup">
-                <button>Sign Up</button>
+                <button>
+                  Sign Up
+                </button>
               </a>
             </>
           )}
@@ -233,195 +309,344 @@ export default function Home() {
           STUDENT ACCOMMODATION MADE SIMPLE
         </p>
 
-        <h2>Find Your Perfect Student Home</h2>
+        <h2>
+          Find Your Perfect Student Home
+        </h2>
 
         <p>
-          Find verified hostels, rooms, and student
-          accommodation near your university.
+          Find verified hostels, rooms, and
+          student accommodation near your
+          university.
         </p>
 
         <div className="search-box">
           <select defaultValue="">
-            <option value="" disabled>
+            <option
+              value=""
+              disabled
+            >
               Select University
             </option>
 
-            <option>UPSA</option>
-            <option>University of Ghana</option>
-            <option>KNUST</option>
+            <option>
+              UPSA
+            </option>
+
+            <option>
+              University of Ghana
+            </option>
+
+            <option>
+              KNUST
+            </option>
+
             <option>
               University of Cape Coast
             </option>
           </select>
 
           <select defaultValue="">
-            <option value="" disabled>
+            <option
+              value=""
+              disabled
+            >
               Room Type
             </option>
 
-            <option>Single Room</option>
-            <option>2 in a Room</option>
-            <option>4 in a Room</option>
-            <option>6 in a Room</option>
+            <option>
+              Single Room
+            </option>
+
+            <option>
+              2 in a Room
+            </option>
+
+            <option>
+              4 in a Room
+            </option>
+
+            <option>
+              6 in a Room
+            </option>
           </select>
 
-          <button>Search Housing</button>
+          <button>
+            Search Housing
+          </button>
         </div>
       </section>
 
       <section id="housing">
         <div className="section-heading">
-          <p>FEATURED ACCOMMODATION</p>
+          <p>
+            FEATURED ACCOMMODATION
+          </p>
 
-          <h2>Find Student Accommodation</h2>
+          <h2>
+            Find Student Accommodation
+          </h2>
 
           <span>
-            Explore accommodation options near your
-            university and find a room that fits your
-            budget.
+            Explore accommodation options
+            near your university and find a
+            room that fits your budget.
           </span>
         </div>
 
         {loadingProperties ? (
-          <p>Loading accommodation...</p>
-        ) : properties.length === 0 ? (
           <p>
-            No approved accommodation is available yet.
+            Loading accommodation...
+          </p>
+        ) : properties.length ===
+          0 ? (
+          <p>
+            No approved accommodation is
+            available yet.
           </p>
         ) : (
           <div className="property-grid">
-            {properties.map((property) => {
-              const isSaved =
-                savedProperties.includes(
-                  property.id
-                );
+            {properties.map(
+              (property) => {
+                const isSaved =
+                  savedProperties.includes(
+                    property.id
+                  );
 
-              const media =
-                propertyMedia[property.id] || [];
+                const media =
+                  propertyMedia[
+                    property.id
+                  ] || [];
 
-              const propertyImages =
-                media.filter(
-                  (item) =>
-                    item.media_type === "image"
-                );
+                const propertyImages =
+                  media.filter(
+                    (item) =>
+                      item.media_type ===
+                      "image"
+                  );
 
-              const hasVideo = media.some(
-                (item) =>
-                  item.media_type === "video"
-              );
+                const hasVideo =
+                  media.some(
+                    (item) =>
+                      item.media_type ===
+                      "video"
+                  );
 
-              const mainImage =
-                propertyImages.find(
-                  (image) =>
-                    image.public_url ===
-                    property.image_url
-                ) ||
-                propertyImages[0];
+                const mainImage =
+                  propertyImages.find(
+                    (image) =>
+                      image.public_url ===
+                      property.image_url
+                  ) ||
+                  propertyImages[0];
 
-              return (
-                <article
-                  className="property-card"
-                  key={property.id}
-                >
-                  <div className="property-image">
-                    {mainImage ? (
-                      <img
-                        src={mainImage.public_url}
-                        alt={property.name}
-                      />
-                    ) : property.image_url ? (
-                      <img
-                        src={property.image_url}
-                        alt={property.name}
-                      />
-                    ) : (
-                      <>
-                        <span>🏠</span>
-                        <p>
-                          Student Accommodation
-                        </p>
-                      </>
-                    )}
+                const spaces =
+                  Number(
+                    property.spaces
+                  );
 
-                    {hasVideo && (
-                      <span className="property-video-badge">
-                        🎥 Video Tour
-                      </span>
-                    )}
-                  </div>
+                const roomUnavailable =
+                  Number.isFinite(
+                    spaces
+                  ) &&
+                  spaces <= 0;
 
-                  <div className="property-content">
-                    <div className="property-top">
-                      <h3>{property.name}</h3>
+                return (
+                  <article
+                    className="property-card"
+                    key={
+                      property.id
+                    }
+                  >
+                    <div
+                      className="property-image"
+                      style={{
+                        position:
+                          "relative",
+                      }}
+                    >
+                      {mainImage ? (
+                        <img
+                          src={
+                            mainImage.public_url
+                          }
+                          alt={
+                            property.name
+                          }
+                        />
+                      ) : property.image_url ? (
+                        <img
+                          src={
+                            property.image_url
+                          }
+                          alt={
+                            property.name
+                          }
+                        />
+                      ) : (
+                        <>
+                          <span>
+                            🏠
+                          </span>
 
-                      <button
-                        className="save-button"
-                        onClick={() =>
-                          toggleSave(property.id)
-                        }
-                        aria-label={
-                          isSaved
-                            ? "Remove saved property"
-                            : "Save property"
-                        }
-                      >
-                        {isSaved
-                          ? "♥"
-                          : "♡"}
-                      </button>
+                          <p>
+                            Student
+                            Accommodation
+                          </p>
+                        </>
+                      )}
+
+                      {hasVideo && (
+                        <span className="property-video-badge">
+                          🎥 Video Tour
+                        </span>
+                      )}
+
+                      {roomUnavailable && (
+                        <div
+                          style={{
+                            position:
+                              "absolute",
+                            inset: 0,
+                            display:
+                              "flex",
+                            alignItems:
+                              "center",
+                            justifyContent:
+                              "center",
+                            background:
+                              "rgba(0,0,0,0.55)",
+                            zIndex: 3,
+                          }}
+                        >
+                          <span
+                            style={{
+                              padding:
+                                "10px 16px",
+                              borderRadius:
+                                "999px",
+                              background:
+                                "#ffffff",
+                              color:
+                                "#991b1b",
+                              fontSize:
+                                "14px",
+                              fontWeight:
+                                700,
+                            }}
+                          >
+                            Room unavailable
+                          </span>
+                        </div>
+                      )}
                     </div>
 
-                    <p className="location">
-                      📍 {property.location}
-                    </p>
+                    <div className="property-content">
+                      <div className="property-top">
+                        <h3>
+                          {
+                            property.name
+                          }
+                        </h3>
 
-                    <div className="property-info">
-                      <span>
-                        {property.room_type}
-                      </span>
-
-                      <span>
-                        {property.spaces} spaces
-                        available
-                      </span>
-                    </div>
-
-                    {property.walking_minutes && (
-                      <div className="property-walking-time">
-                        🚶{" "}
-                        {property.walking_minutes}{" "}
-                        min walk to campus
+                        <button
+                          className="save-button"
+                          onClick={() =>
+                            toggleSave(
+                              property.id
+                            )
+                          }
+                          aria-label={
+                            isSaved
+                              ? "Remove saved property"
+                              : "Save property"
+                          }
+                        >
+                          {isSaved
+                            ? "♥"
+                            : "♡"}
+                        </button>
                       </div>
-                    )}
 
-                    <div className="property-bottom">
-                      <div>
-                        <strong>
-                          GH₵{" "}
-                          {Number(
-                            property.display_price ??
-                              property.price
-                          ).toLocaleString()}
-                        </strong>
+                      <p className="location">
+                        📍{" "}
+                        {
+                          property.location
+                        }
+                      </p>
 
-                        <small>
-                          {property.period}
-                        </small>
+                      <div className="property-info">
+                        <span>
+                          {
+                            property.room_type
+                          }
+                        </span>
+
+                        {roomUnavailable ? (
+                          <span
+                            style={{
+                              color:
+                                "#991b1b",
+                              fontWeight:
+                                700,
+                            }}
+                          >
+                            Room unavailable
+                            at the moment
+                          </span>
+                        ) : (
+                          <span>
+                            {spaces}{" "}
+                            {spaces ===
+                            1
+                              ? "space"
+                              : "spaces"}{" "}
+                            available
+                          </span>
+                        )}
                       </div>
 
-                      <button
-                        className="details-button"
-                        onClick={() => {
-                          window.location.href = `/property/${property.id}`;
-                        }}
-                      >
-                        View Details
-                      </button>
+                      {property.walking_minutes && (
+                        <div className="property-walking-time">
+                          🚶{" "}
+                          {
+                            property.walking_minutes
+                          }{" "}
+                          min walk to
+                          campus
+                        </div>
+                      )}
+
+                      <div className="property-bottom">
+                        <div>
+                          <strong>
+                            GH₵{" "}
+                            {Number(
+                              property.display_price ??
+                                property.price
+                            ).toLocaleString()}
+                          </strong>
+
+                          <small>
+                            {
+                              property.period
+                            }
+                          </small>
+                        </div>
+
+                        <button
+                          className="details-button"
+                          onClick={() => {
+                            window.location.href = `/property/${property.id}`;
+                          }}
+                        >
+                          View Details
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                </article>
-              );
-            })}
+                  </article>
+                );
+              }
+            )}
           </div>
         )}
 
@@ -435,14 +660,18 @@ export default function Home() {
           ABOUT STUVANA
         </p>
 
-        <h2>Built for Students</h2>
+        <h2>
+          Built for Students
+        </h2>
 
         <p>
-          STUVANA makes it easier for students to
-          discover verified accommodation, compare
-          options, and find a comfortable place to
-          live. We are starting in Ghana and building
-          toward universities around the world.
+          STUVANA makes it easier for
+          students to discover verified
+          accommodation, compare options,
+          and find a comfortable place to
+          live. We are starting in Ghana
+          and building toward universities
+          around the world.
         </p>
       </section>
     </main>

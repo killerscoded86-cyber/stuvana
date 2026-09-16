@@ -23,9 +23,7 @@ export default function PropertyDetailsPage() {
     useState<PropertyMedia | null>(null);
 
   const [user, setUser] = useState<any>(null);
-  const [accountType, setAccountType] = useState<string | null>(
-    null
-  );
+  const [accountType, setAccountType] = useState<string | null>(null);
 
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -56,33 +54,27 @@ export default function PropertyDetailsPage() {
             .maybeSingle();
 
         if (profileError) {
-          console.error(
-            "Profile error:",
-            profileError
-          );
+          console.error("Profile error:", profileError);
         } else {
-          setAccountType(
-            profile?.account_type || null
-          );
+          setAccountType(profile?.account_type || null);
         }
       } else {
         setAccountType(null);
       }
 
-      /* LOAD PROPERTY */
+      /* LOAD ONLY APPROVED PROPERTY */
 
       const { data, error } = await supabase
         .from("properties")
         .select("*")
         .eq("id", propertyId)
+        .eq("status", "approved")
         .single();
 
-      if (error) {
-        console.error(
-          "Property error:",
-          error
-        );
+      if (error || !data) {
+        console.error("Property error:", error);
 
+        setProperty(null);
         setLoading(false);
         return;
       }
@@ -103,10 +95,7 @@ export default function PropertyDetailsPage() {
         });
 
       if (mediaError) {
-        console.error(
-          "Property media error:",
-          mediaError
-        );
+        console.error("Property media error:", mediaError);
       }
 
       const loadedMedia = mediaData || [];
@@ -123,8 +112,7 @@ export default function PropertyDetailsPage() {
         setSelectedMedia(mainImage);
       } else {
         const firstImage = loadedMedia.find(
-          (item) =>
-            item.media_type === "image"
+          (item) => item.media_type === "image"
         );
 
         if (firstImage) {
@@ -163,9 +151,7 @@ export default function PropertyDetailsPage() {
 
   async function toggleSave() {
     if (!user) {
-      alert(
-        "Please log in to save properties."
-      );
+      alert("Please log in to save properties.");
 
       router.push("/login");
       return;
@@ -331,17 +317,30 @@ export default function PropertyDetailsPage() {
       <main className="dashboard-page">
         <section className="dashboard-header">
           <p className="hero-label">
-            PROPERTY NOT FOUND
+            PROPERTY NOT AVAILABLE
           </p>
 
           <h1>
-            We couldn't find this property.
+            This accommodation is not currently available.
           </h1>
+
+          <p
+            style={{
+              marginTop: "10px",
+              color: "#666",
+            }}
+          >
+            The property may still be waiting for approval,
+            may have been rejected, or may no longer be listed.
+          </p>
 
           <button
             onClick={() =>
               router.push("/#housing")
             }
+            style={{
+              marginTop: "20px",
+            }}
           >
             Back to Accommodation
           </button>
@@ -363,6 +362,15 @@ export default function PropertyDetailsPage() {
   const isStudent =
     !!user &&
     accountType === "student";
+
+  const hasPropertyCoordinates =
+    typeof property.latitude === "number" &&
+    typeof property.longitude === "number";
+
+  const propertyMapUrl =
+    hasPropertyCoordinates
+      ? `https://www.openstreetmap.org/export/embed.html?bbox=${property.longitude - 0.005}%2C${property.latitude - 0.005}%2C${property.longitude + 0.005}%2C${property.latitude + 0.005}&layer=mapnik&marker=${property.latitude}%2C${property.longitude}`
+      : null;
 
   return (
     <main className="property-details-page">
@@ -571,6 +579,76 @@ export default function PropertyDetailsPage() {
                 "No description has been provided for this property yet."}
             </p>
           </div>
+
+          {/* PROPERTY LOCATION */}
+
+          {propertyMapUrl && (
+            <div
+              className="property-location-map"
+              style={{
+                marginTop: "30px",
+              }}
+            >
+              <div
+                style={{
+                  marginBottom: "16px",
+                }}
+              >
+                <p className="hero-label">
+                  PROPERTY LOCATION
+                </p>
+
+                <h2>
+                  Find this accommodation
+                </h2>
+
+                <p
+                  style={{
+                    color: "#666",
+                    marginTop: "6px",
+                  }}
+                >
+                  The map shows the precise
+                  location provided by the
+                  property owner.
+                </p>
+              </div>
+
+              <div
+                style={{
+                  width: "100%",
+                  overflow: "hidden",
+                  borderRadius: "16px",
+                  border:
+                    "1px solid rgba(0,0,0,0.08)",
+                  background: "#f3f4f6",
+                }}
+              >
+                <iframe
+                  title={`${property.name} location`}
+                  src={propertyMapUrl}
+                  style={{
+                    width: "100%",
+                    height: "400px",
+                    border: 0,
+                    display: "block",
+                  }}
+                  loading="lazy"
+                />
+              </div>
+
+              <div
+                style={{
+                  marginTop: "10px",
+                  fontSize: "13px",
+                  color: "#777",
+                }}
+              >
+                📍 {property.latitude.toFixed(6)},{" "}
+                {property.longitude.toFixed(6)}
+              </div>
+            </div>
+          )}
 
           {/* PROPERTY VIDEO */}
 

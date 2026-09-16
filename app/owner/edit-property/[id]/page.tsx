@@ -33,6 +33,13 @@ export default function EditPropertyPage() {
   const [walkingMinutes, setWalkingMinutes] = useState("");
   const [description, setDescription] = useState("");
 
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+  const [locationAccuracy, setLocationAccuracy] =
+    useState<number | null>(null);
+  const [gettingLocation, setGettingLocation] =
+    useState(false);
+
   const [media, setMedia] = useState<PropertyMedia[]>([]);
   const [mainImageUrl, setMainImageUrl] = useState<string | null>(null);
 
@@ -70,10 +77,15 @@ export default function EditPropertyPage() {
           .single();
 
       if (propertyError || !property) {
-        console.error("Load property error:", propertyError);
+        console.error(
+          "Load property error:",
+          propertyError
+        );
+
         alert(
           "Property not found or you do not have permission to edit it."
         );
+
         router.push("/owner/dashboard");
         return;
       }
@@ -91,15 +103,32 @@ export default function EditPropertyPage() {
       setDescription(property.description || "");
       setMainImageUrl(property.image_url || null);
 
+      setLatitude(
+        typeof property.latitude === "number"
+          ? property.latitude
+          : null
+      );
+
+      setLongitude(
+        typeof property.longitude === "number"
+          ? property.longitude
+          : null
+      );
+
       const { data: mediaData, error: mediaError } =
         await supabase
           .from("property_media")
           .select("*")
           .eq("property_id", propertyId)
-          .order("sort_order", { ascending: true });
+          .order("sort_order", {
+            ascending: true,
+          });
 
       if (mediaError) {
-        console.error("Load property media error:", mediaError);
+        console.error(
+          "Load property media error:",
+          mediaError
+        );
       }
 
       setMedia(mediaData || []);
@@ -109,11 +138,78 @@ export default function EditPropertyPage() {
     loadProperty();
   }, [propertyId, router]);
 
+  function usePreciseLocation() {
+    if (!navigator.geolocation) {
+      alert(
+        "Your browser does not support location services."
+      );
+      return;
+    }
+
+    setGettingLocation(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const currentLatitude =
+          position.coords.latitude;
+
+        const currentLongitude =
+          position.coords.longitude;
+
+        setLatitude(currentLatitude);
+        setLongitude(currentLongitude);
+
+        setLocationAccuracy(
+          position.coords.accuracy
+        );
+
+        setGettingLocation(false);
+      },
+      (error) => {
+        console.error(
+          "Location error:",
+          error
+        );
+
+        setGettingLocation(false);
+
+        if (error.code === 1) {
+          alert(
+            "Location permission was denied. Please allow location access in your browser and try again."
+          );
+        } else if (error.code === 2) {
+          alert(
+            "Your location could not be determined. Please try again."
+          );
+        } else {
+          alert(
+            "Unable to get your precise location. Please try again."
+          );
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      }
+    );
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
     if (!name || !location || !roomType || !price || !spaces) {
       alert("Please fill in all required fields.");
+      return;
+    }
+
+    if (
+      latitude === null ||
+      longitude === null
+    ) {
+      alert(
+        "Please select the property's precise location on the map before saving."
+      );
       return;
     }
 
@@ -155,16 +251,12 @@ export default function EditPropertyPage() {
          CALCULATE FINAL STUDENT PRICE
       -------------------------------- */
 
-      // Paystack Ghana local transaction fee
       const paystackFeeRate = 0.0195;
 
-      // Convert owner's price to pesewas
       const basePricePesewas = Math.round(
         basePrice * 100
       );
 
-      // Calculate the final price shown to students
-      // so the payment processing fee is included.
       const displayPricePesewas = Math.ceil(
         basePricePesewas / (1 - paystackFeeRate)
       );
@@ -182,13 +274,8 @@ export default function EditPropertyPage() {
           name,
           location,
           room_type: roomType,
-
-          // Original price entered by owner
           price: basePrice,
-
-          // Final price shown to students
           display_price: displayPrice,
-
           period,
           spaces: Number(spaces),
           university: university || null,
@@ -196,6 +283,8 @@ export default function EditPropertyPage() {
             ? Number(walkingMinutes)
             : null,
           description: description || null,
+          latitude,
+          longitude,
         })
         .eq("id", propertyId)
         .eq("owner_id", user.id);
@@ -225,9 +314,10 @@ export default function EditPropertyPage() {
 
         const fileName = `${user.id}/${propertyId}/images/${crypto.randomUUID()}.${fileExt}`;
 
-        const { error: uploadError } = await supabase.storage
-          .from("property-media")
-          .upload(fileName, photo);
+        const { error: uploadError } =
+          await supabase.storage
+            .from("property-media")
+            .upload(fileName, photo);
 
         if (uploadError) {
           throw uploadError;
@@ -235,9 +325,10 @@ export default function EditPropertyPage() {
 
         uploadedStoragePaths.push(fileName);
 
-        const { data: publicData } = supabase.storage
-          .from("property-media")
-          .getPublicUrl(fileName);
+        const { data: publicData } =
+          supabase.storage
+            .from("property-media")
+            .getPublicUrl(fileName);
 
         newPhotoRows.push({
           id: 0,
@@ -250,19 +341,21 @@ export default function EditPropertyPage() {
       }
 
       if (newPhotoRows.length > 0) {
-        const { data: insertedPhotos, error: photoError } =
-          await supabase
-            .from("property_media")
-            .insert(
-              newPhotoRows.map((photo) => ({
-                property_id: photo.property_id,
-                media_type: photo.media_type,
-                storage_path: photo.storage_path,
-                public_url: photo.public_url,
-                sort_order: photo.sort_order,
-              }))
-            )
-            .select();
+        const {
+          data: insertedPhotos,
+          error: photoError,
+        } = await supabase
+          .from("property_media")
+          .insert(
+            newPhotoRows.map((photo) => ({
+              property_id: photo.property_id,
+              media_type: photo.media_type,
+              storage_path: photo.storage_path,
+              public_url: photo.public_url,
+              sort_order: photo.sort_order,
+            }))
+          )
+          .select();
 
         if (photoError) {
           throw photoError;
@@ -277,20 +370,23 @@ export default function EditPropertyPage() {
         if (!mainImageUrl && insertedPhotos?.length) {
           const firstPhoto = insertedPhotos[0];
 
-          const { error: mainImageError } =
-            await supabase
-              .from("properties")
-              .update({
-                image_url: firstPhoto.public_url,
-              })
-              .eq("id", propertyId)
-              .eq("owner_id", user.id);
+          const {
+            error: mainImageError,
+          } = await supabase
+            .from("properties")
+            .update({
+              image_url: firstPhoto.public_url,
+            })
+            .eq("id", propertyId)
+            .eq("owner_id", user.id);
 
           if (mainImageError) {
             throw mainImageError;
           }
 
-          setMainImageUrl(firstPhoto.public_url);
+          setMainImageUrl(
+            firstPhoto.public_url
+          );
         }
       }
 
@@ -300,18 +396,21 @@ export default function EditPropertyPage() {
 
       if (newVideo) {
         const existingVideo = media.find(
-          (item) => item.media_type === "video"
+          (item) =>
+            item.media_type === "video"
         );
 
         const fileExt =
-          newVideo.name.split(".").pop()?.toLowerCase() || "mp4";
+          newVideo.name.split(".").pop()?.toLowerCase() ||
+          "mp4";
 
         const fileName = `${user.id}/${propertyId}/videos/${crypto.randomUUID()}.${fileExt}`;
 
-        const { error: videoUploadError } =
-          await supabase.storage
-            .from("property-media")
-            .upload(fileName, newVideo);
+        const {
+          error: videoUploadError,
+        } = await supabase.storage
+          .from("property-media")
+          .upload(fileName, newVideo);
 
         if (videoUploadError) {
           throw videoUploadError;
@@ -319,9 +418,10 @@ export default function EditPropertyPage() {
 
         uploadedStoragePaths.push(fileName);
 
-        const { data: publicData } = supabase.storage
-          .from("property-media")
-          .getPublicUrl(fileName);
+        const { data: publicData } =
+          supabase.storage
+            .from("property-media")
+            .getPublicUrl(fileName);
 
         const {
           data: insertedVideo,
@@ -344,10 +444,13 @@ export default function EditPropertyPage() {
 
         /* Delete old video after new video is successfully saved */
         if (existingVideo) {
-          const { error: oldVideoStorageError } =
-            await supabase.storage
-              .from("property-media")
-              .remove([existingVideo.storage_path]);
+          const {
+            error: oldVideoStorageError,
+          } = await supabase.storage
+            .from("property-media")
+            .remove([
+              existingVideo.storage_path,
+            ]);
 
           if (oldVideoStorageError) {
             console.error(
@@ -356,11 +459,12 @@ export default function EditPropertyPage() {
             );
           }
 
-          const { error: oldVideoDbError } =
-            await supabase
-              .from("property_media")
-              .delete()
-              .eq("id", existingVideo.id);
+          const {
+            error: oldVideoDbError,
+          } = await supabase
+            .from("property_media")
+            .delete()
+            .eq("id", existingVideo.id);
 
           if (oldVideoDbError) {
             console.error(
@@ -372,7 +476,8 @@ export default function EditPropertyPage() {
 
         updatedMedia = [
           ...updatedMedia.filter(
-            (item) => item.media_type !== "video"
+            (item) =>
+              item.media_type !== "video"
           ),
           insertedVideo,
         ];
@@ -382,17 +487,24 @@ export default function EditPropertyPage() {
       setNewPhotos([]);
       setNewVideo(null);
 
-      alert("Property updated successfully!");
+      alert(
+        "Property updated successfully!"
+      );
 
-      router.push(`/property/${propertyId}`);
+      router.push("/owner/dashboard");
     } catch (error: any) {
-      console.error("Edit property error:", error);
+      console.error(
+        "Edit property error:",
+        error
+      );
 
       /* Clean up newly uploaded files if something failed */
       if (uploadedStoragePaths.length > 0) {
         await supabase.storage
           .from("property-media")
-          .remove(uploadedStoragePaths);
+          .remove(
+            uploadedStoragePaths
+          );
       }
 
       alert(
@@ -416,27 +528,30 @@ export default function EditPropertyPage() {
     setDeletingMediaId(item.id);
 
     try {
-      const { error: storageError } =
-        await supabase.storage
-          .from("property-media")
-          .remove([item.storage_path]);
+      const {
+        error: storageError,
+      } = await supabase.storage
+        .from("property-media")
+        .remove([item.storage_path]);
 
       if (storageError) {
         throw storageError;
       }
 
-      const { error: dbError } = await supabase
-        .from("property_media")
-        .delete()
-        .eq("id", item.id)
-        .eq("property_id", propertyId);
+      const { error: dbError } =
+        await supabase
+          .from("property_media")
+          .delete()
+          .eq("id", item.id)
+          .eq("property_id", propertyId);
 
       if (dbError) {
         throw dbError;
       }
 
       const remainingMedia = media.filter(
-        (mediaItem) => mediaItem.id !== item.id
+        (mediaItem) =>
+          mediaItem.id !== item.id
       );
 
       setMedia(remainingMedia);
@@ -446,21 +561,28 @@ export default function EditPropertyPage() {
         item.media_type === "image" &&
         mainImageUrl === item.public_url
       ) {
-        const nextImage = remainingMedia.find(
-          (mediaItem) => mediaItem.media_type === "image"
-        );
+        const nextImage =
+          remainingMedia.find(
+            (mediaItem) =>
+              mediaItem.media_type ===
+              "image"
+          );
 
         const nextImageUrl = nextImage
           ? nextImage.public_url
           : null;
 
-        const { error: imageUpdateError } =
-          await supabase
-            .from("properties")
-            .update({
-              image_url: nextImageUrl,
-            })
-            .eq("id", propertyId);
+        const {
+          error: imageUpdateError,
+        } = await supabase
+          .from("properties")
+          .update({
+            image_url: nextImageUrl,
+          })
+          .eq("id", propertyId)
+          .eq("owner_id", (
+            await supabase.auth.getUser()
+          ).data.user?.id);
 
         if (imageUpdateError) {
           throw imageUpdateError;
@@ -475,7 +597,10 @@ export default function EditPropertyPage() {
           : "Photo deleted successfully."
       );
     } catch (error: any) {
-      console.error("Delete media error:", error);
+      console.error(
+        "Delete media error:",
+        error
+      );
 
       alert(
         error?.message ||
@@ -486,7 +611,9 @@ export default function EditPropertyPage() {
     }
   }
 
-  async function setMainImage(publicUrl: string) {
+  async function setMainImage(
+    publicUrl: string
+  ) {
     try {
       const {
         data: { user },
@@ -512,9 +639,14 @@ export default function EditPropertyPage() {
 
       setMainImageUrl(publicUrl);
 
-      alert("Main property photo updated.");
+      alert(
+        "Main property photo updated."
+      );
     } catch (error: any) {
-      console.error("Set main image error:", error);
+      console.error(
+        "Set main image error:",
+        error
+      );
 
       alert(
         error?.message ||
@@ -533,21 +665,37 @@ export default function EditPropertyPage() {
         </nav>
 
         <section className="dashboard-header">
-          <p className="hero-label">PROPERTY OWNER</p>
-          <h1>Loading Property...</h1>
-          <p>Please wait while we load your property.</p>
+          <p className="hero-label">
+            PROPERTY OWNER
+          </p>
+
+          <h1>
+            Loading Property...
+          </h1>
+
+          <p>
+            Please wait while we load your property.
+          </p>
         </section>
       </main>
     );
   }
 
   const existingPhotos = media.filter(
-    (item) => item.media_type === "image"
+    (item) =>
+      item.media_type === "image"
   );
 
   const existingVideo = media.find(
-    (item) => item.media_type === "video"
+    (item) =>
+      item.media_type === "video"
   );
+
+  const mapEmbedUrl =
+    latitude !== null &&
+    longitude !== null
+      ? `https://www.openstreetmap.org/export/embed.html?bbox=${longitude - 0.005}%2C${latitude - 0.005}%2C${longitude + 0.005}%2C${latitude + 0.005}&layer=mapnik&marker=${latitude}%2C${longitude}`
+      : null;
 
   return (
     <main className="dashboard-page">
@@ -557,19 +705,28 @@ export default function EditPropertyPage() {
         </a>
 
         <button
-          onClick={() => router.push("/owner/dashboard")}
+          onClick={() =>
+            router.push(
+              "/owner/dashboard"
+            )
+          }
         >
           ← Dashboard
         </button>
       </nav>
 
       <section className="dashboard-header">
-        <p className="hero-label">PROPERTY OWNER</p>
+        <p className="hero-label">
+          PROPERTY OWNER
+        </p>
 
-        <h1>Edit Property</h1>
+        <h1>
+          Edit Property
+        </h1>
 
         <p>
-          Update your accommodation details, photos and video.
+          Update your accommodation details,
+          photos, video and location.
         </p>
       </section>
 
@@ -581,14 +738,20 @@ export default function EditPropertyPage() {
           {/* PROPERTY INFORMATION */}
 
           <div className="form-section">
-            <h2>Property Information</h2>
+            <h2>
+              Property Information
+            </h2>
 
             <label>
               Property Name *
               <input
                 type="text"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) =>
+                  setName(
+                    e.target.value
+                  )
+                }
                 placeholder="e.g. Madina Student Hostel"
                 required
               />
@@ -599,7 +762,11 @@ export default function EditPropertyPage() {
               <input
                 type="text"
                 value={location}
-                onChange={(e) => setLocation(e.target.value)}
+                onChange={(e) =>
+                  setLocation(
+                    e.target.value
+                  )
+                }
                 placeholder="e.g. Madina, Accra"
                 required
               />
@@ -610,7 +777,11 @@ export default function EditPropertyPage() {
               <input
                 type="text"
                 value={university}
-                onChange={(e) => setUniversity(e.target.value)}
+                onChange={(e) =>
+                  setUniversity(
+                    e.target.value
+                  )
+                }
                 placeholder="e.g. UPSA"
               />
             </label>
@@ -623,26 +794,189 @@ export default function EditPropertyPage() {
                   min="1"
                   value={walkingMinutes}
                   onChange={(e) =>
-                    setWalkingMinutes(e.target.value)
+                    setWalkingMinutes(
+                      e.target.value
+                    )
                   }
                   placeholder="15"
                 />
 
-                <span>mins walk</span>
+                <span>
+                  mins walk
+                </span>
               </div>
             </label>
+          </div>
+
+          {/* PRECISE PROPERTY LOCATION */}
+
+          <div className="form-section">
+            <h2>
+              Precise Property Location
+            </h2>
+
+            <p className="upload-help">
+              Update the exact property
+              position using your device's
+              precise location.
+            </p>
+
+            <button
+              type="button"
+              onClick={
+                usePreciseLocation
+              }
+              disabled={
+                gettingLocation
+              }
+              className="details-secondary-button"
+              style={{
+                marginBottom:
+                  "16px",
+                cursor:
+                  gettingLocation
+                    ? "not-allowed"
+                    : "pointer",
+              }}
+            >
+              {gettingLocation
+                ? "Getting Precise Location..."
+                : "📍 Use My Precise Location"}
+            </button>
+
+            {latitude !== null &&
+              longitude !== null && (
+                <div
+                  style={{
+                    marginBottom:
+                      "16px",
+                    padding:
+                      "14px",
+                    borderRadius:
+                      "10px",
+                    background:
+                      "#f0fdf4",
+                    border:
+                      "1px solid #bbf7d0",
+                  }}
+                >
+                  <strong>
+                    Property location selected
+                  </strong>
+
+                  <p
+                    style={{
+                      margin:
+                        "6px 0 0",
+                      fontSize:
+                        "14px",
+                    }}
+                  >
+                    Latitude:{" "}
+                    {latitude.toFixed(
+                      6
+                    )}
+                    <br />
+                    Longitude:{" "}
+                    {longitude.toFixed(
+                      6
+                    )}
+                  </p>
+
+                  {locationAccuracy !==
+                    null && (
+                    <p
+                      style={{
+                        margin:
+                          "6px 0 0",
+                        fontSize:
+                          "13px",
+                      }}
+                    >
+                      GPS accuracy:
+                      {" "}
+                      approximately{" "}
+                      {Math.round(
+                        locationAccuracy
+                      )}
+                      m
+                    </p>
+                  )}
+                </div>
+              )}
+
+            {mapEmbedUrl ? (
+              <div
+                style={{
+                  width: "100%",
+                  overflow:
+                    "hidden",
+                  borderRadius:
+                    "12px",
+                  border:
+                    "1px solid #e5e7eb",
+                }}
+              >
+                <iframe
+                  title="Property location map"
+                  src={
+                    mapEmbedUrl
+                  }
+                  style={{
+                    width: "100%",
+                    height: "350px",
+                    border: 0,
+                    display:
+                      "block",
+                  }}
+                  loading="lazy"
+                />
+              </div>
+            ) : (
+              <div
+                style={{
+                  width: "100%",
+                  height: "220px",
+                  borderRadius:
+                    "12px",
+                  background:
+                    "#f3f4f6",
+                  display: "flex",
+                  alignItems:
+                    "center",
+                  justifyContent:
+                    "center",
+                  textAlign:
+                    "center",
+                  padding:
+                    "20px",
+                  color:
+                    "#6b7280",
+                }}
+              >
+                No precise property
+                location has been
+                selected yet.
+              </div>
+            )}
           </div>
 
           {/* ROOM & PRICING */}
 
           <div className="form-section">
-            <h2>Room & Pricing</h2>
+            <h2>
+              Room & Pricing
+            </h2>
 
             <label>
               Room Type *
               <select
                 value={roomType}
-                onChange={(e) => setRoomType(e.target.value)}
+                onChange={(e) =>
+                  setRoomType(
+                    e.target.value
+                  )
+                }
                 required
               >
                 <option value="">
@@ -682,23 +1016,31 @@ export default function EditPropertyPage() {
                 min="0"
                 step="0.01"
                 value={price}
-                onChange={(e) => setPrice(e.target.value)}
+                onChange={(e) =>
+                  setPrice(
+                    e.target.value
+                  )
+                }
                 placeholder="8500"
                 required
               />
             </label>
 
             <p className="upload-help">
-              STUVANA automatically includes payment
-              processing costs in the final price shown to
-              students.
+              STUVANA automatically includes
+              payment processing costs in the
+              final price shown to students.
             </p>
 
             <label>
               Payment Period
               <select
                 value={period}
-                onChange={(e) => setPeriod(e.target.value)}
+                onChange={(e) =>
+                  setPeriod(
+                    e.target.value
+                  )
+                }
               >
                 <option value="Per Semester">
                   Per Semester
@@ -720,7 +1062,11 @@ export default function EditPropertyPage() {
                 type="number"
                 min="1"
                 value={spaces}
-                onChange={(e) => setSpaces(e.target.value)}
+                onChange={(e) =>
+                  setSpaces(
+                    e.target.value
+                  )
+                }
                 placeholder="5"
                 required
               />
@@ -730,7 +1076,9 @@ export default function EditPropertyPage() {
           {/* DESCRIPTION */}
 
           <div className="form-section">
-            <h2>Description</h2>
+            <h2>
+              Description
+            </h2>
 
             <label>
               Property Description
@@ -738,7 +1086,9 @@ export default function EditPropertyPage() {
               <textarea
                 value={description}
                 onChange={(e) =>
-                  setDescription(e.target.value)
+                  setDescription(
+                    e.target.value
+                  )
                 }
                 placeholder="Tell students about the accommodation..."
                 rows={6}
@@ -749,7 +1099,9 @@ export default function EditPropertyPage() {
           {/* EXISTING PHOTOS */}
 
           <div className="form-section">
-            <h2>Property Photos</h2>
+            <h2>
+              Property Photos
+            </h2>
 
             {existingPhotos.length === 0 ? (
               <p className="upload-help">
@@ -757,51 +1109,65 @@ export default function EditPropertyPage() {
               </p>
             ) : (
               <div className="edit-media-grid">
-                {existingPhotos.map((photo) => (
-                  <div
-                    className="edit-media-card"
-                    key={photo.id}
-                  >
-                    <div className="edit-media-preview">
-                      <img
-                        src={photo.public_url}
-                        alt={name}
-                      />
+                {existingPhotos.map(
+                  (photo) => (
+                    <div
+                      className="edit-media-card"
+                      key={photo.id}
+                    >
+                      <div className="edit-media-preview">
+                        <img
+                          src={
+                            photo.public_url
+                          }
+                          alt={name}
+                        />
 
-                      {mainImageUrl === photo.public_url && (
-                        <span className="main-photo-badge">
-                          MAIN PHOTO
-                        </span>
-                      )}
-                    </div>
+                        {mainImageUrl ===
+                          photo.public_url && (
+                          <span className="main-photo-badge">
+                            MAIN PHOTO
+                          </span>
+                        )}
+                      </div>
 
-                    <div className="edit-media-actions">
-                      {mainImageUrl !== photo.public_url && (
+                      <div className="edit-media-actions">
+                        {mainImageUrl !==
+                          photo.public_url && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setMainImage(
+                                photo.public_url
+                              )
+                            }
+                          >
+                            Set as Main
+                          </button>
+                        )}
+
                         <button
                           type="button"
+                          className="media-delete-button"
+                          disabled={
+                            deletingMediaId ===
+                            photo.id
+                          }
                           onClick={() =>
-                            setMainImage(photo.public_url)
+                            deleteMedia(
+                              photo
+                            )
                           }
                         >
-                          Set as Main
+                          {deletingMediaId ===
+                          photo.id
+                            ? "Deleting..."
+                            : "Delete"}
                         </button>
-                      )}
-
-                      <button
-                        type="button"
-                        className="media-delete-button"
-                        disabled={
-                          deletingMediaId === photo.id
-                        }
-                        onClick={() => deleteMedia(photo)}
-                      >
-                        {deletingMediaId === photo.id
-                          ? "Deleting..."
-                          : "Delete"}
-                      </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                )}
               </div>
             )}
 
@@ -815,16 +1181,25 @@ export default function EditPropertyPage() {
                   multiple
                   onChange={(e) => {
                     setNewPhotos(
-                      Array.from(e.target.files || [])
+                      Array.from(
+                        e.target.files ||
+                          []
+                      )
                     );
                   }}
                 />
               </label>
 
-              {newPhotos.length > 0 && (
+              {newPhotos.length >
+                0 && (
                 <p className="selected-files">
-                  {newPhotos.length} new photo
-                  {newPhotos.length > 1 ? "s" : ""} selected
+                  {newPhotos.length} new
+                  photo
+                  {newPhotos.length >
+                  1
+                    ? "s"
+                    : ""}{" "}
+                  selected
                 </p>
               )}
             </div>
@@ -833,12 +1208,16 @@ export default function EditPropertyPage() {
           {/* EXISTING VIDEO */}
 
           <div className="form-section">
-            <h2>Property Video</h2>
+            <h2>
+              Property Video
+            </h2>
 
             {existingVideo ? (
               <div className="existing-video-container">
                 <video
-                  src={existingVideo.public_url}
+                  src={
+                    existingVideo.public_url
+                  }
                   controls
                   playsInline
                   className="existing-property-video"
@@ -848,20 +1227,25 @@ export default function EditPropertyPage() {
                   type="button"
                   className="media-delete-button"
                   disabled={
-                    deletingMediaId === existingVideo.id
+                    deletingMediaId ===
+                    existingVideo.id
                   }
                   onClick={() =>
-                    deleteMedia(existingVideo)
+                    deleteMedia(
+                      existingVideo
+                    )
                   }
                 >
-                  {deletingMediaId === existingVideo.id
+                  {deletingMediaId ===
+                  existingVideo.id
                     ? "Deleting..."
                     : "Delete Video"}
                 </button>
               </div>
             ) : (
               <p className="upload-help">
-                No property video has been uploaded yet.
+                No property video has been
+                uploaded yet.
               </p>
             )}
 
@@ -876,7 +1260,8 @@ export default function EditPropertyPage() {
                   accept="video/*"
                   onChange={(e) => {
                     setNewVideo(
-                      e.target.files?.[0] || null
+                      e.target.files?.[0] ||
+                        null
                     );
                   }}
                 />
@@ -884,7 +1269,8 @@ export default function EditPropertyPage() {
 
               {newVideo && (
                 <p className="selected-files">
-                  New video selected: {newVideo.name}
+                  New video selected:{" "}
+                  {newVideo.name}
                 </p>
               )}
             </div>
