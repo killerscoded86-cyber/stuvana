@@ -30,13 +30,14 @@ export default function Home() {
 
       setUser(user);
 
-      // Load properties
+      // Load only admin-approved properties
       const {
         data: propertiesData,
         error: propertiesError,
       } = await supabase
         .from("properties")
         .select("*")
+        .eq("status", "approved")
         .order("created_at", { ascending: false });
 
       if (propertiesError) {
@@ -49,7 +50,7 @@ export default function Home() {
 
         setProperties(loadedProperties);
 
-        // Load photos and videos for all properties
+        // Load photos and videos for approved properties
         if (loadedProperties.length > 0) {
           const propertyIds = loadedProperties.map(
             (property) => property.id
@@ -283,6 +284,10 @@ export default function Home() {
 
         {loadingProperties ? (
           <p>Loading accommodation...</p>
+        ) : properties.length === 0 ? (
+          <p>
+            No approved accommodation is available yet.
+          </p>
         ) : (
           <div className="property-grid">
             {properties.map((property) => {
@@ -318,8 +323,6 @@ export default function Home() {
                   className="property-card"
                   key={property.id}
                 >
-                  {/* PROPERTY IMAGE */}
-
                   <div className="property-image">
                     {mainImage ? (
                       <img
@@ -339,8 +342,6 @@ export default function Home() {
                         </p>
                       </>
                     )}
-
-                    {/* VIDEO BADGE */}
 
                     {hasVideo && (
                       <span className="property-video-badge">
@@ -384,8 +385,6 @@ export default function Home() {
                         available
                       </span>
                     </div>
-
-                    {/* WALKING TIME */}
 
                     {property.walking_minutes && (
                       <div className="property-walking-time">

@@ -81,6 +81,41 @@ export default function DashboardPage() {
     );
   }
 
+  function getPropertyStatus(property: any) {
+    const status = String(property?.status || "pending").toLowerCase();
+
+    if (
+      status === "approved" ||
+      status === "published" ||
+      status === "active"
+    ) {
+      return "approved";
+    }
+
+    if (
+      status === "rejected" ||
+      status === "declined"
+    ) {
+      return "rejected";
+    }
+
+    return "pending";
+  }
+
+  function getStatusLabel(property: any) {
+    const status = getPropertyStatus(property);
+
+    if (status === "approved") {
+      return "Approved";
+    }
+
+    if (status === "rejected") {
+      return "Rejected";
+    }
+
+    return "Pending Approval";
+  }
+
   if (loading) {
     return (
       <main className="dashboard-page">
@@ -220,92 +255,168 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="owner-properties-grid">
-              {properties.map((property) => (
-                <article
-                  className="owner-property-card"
-                  key={property.id}
-                >
-                  <div className="owner-property-image">
-                    {property.image_url ? (
-                      <img
-                        src={property.image_url}
-                        alt={property.name}
-                      />
-                    ) : (
-                      <div className="owner-property-placeholder">
-                        🏠
+              {properties.map((property) => {
+                const status = getPropertyStatus(property);
+                const statusLabel = getStatusLabel(property);
+
+                return (
+                  <article
+                    className="owner-property-card"
+                    key={property.id}
+                  >
+                    <div className="owner-property-image">
+                      {property.image_url ? (
+                        <img
+                          src={property.image_url}
+                          alt={property.name}
+                        />
+                      ) : (
+                        <div className="owner-property-placeholder">
+                          🏠
+                        </div>
+                      )}
+
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "12px",
+                          right: "12px",
+                          padding: "7px 11px",
+                          borderRadius: "999px",
+                          background:
+                            status === "approved"
+                              ? "#dcfce7"
+                              : status === "rejected"
+                              ? "#fee2e2"
+                              : "#fef3c7",
+                          color:
+                            status === "approved"
+                              ? "#166534"
+                              : status === "rejected"
+                              ? "#991b1b"
+                              : "#92400e",
+                          fontSize: "12px",
+                          fontWeight: 700,
+                          lineHeight: 1,
+                          zIndex: 2,
+                        }}
+                      >
+                        {statusLabel}
                       </div>
-                    )}
-                  </div>
-
-                  <div className="owner-property-content">
-                    <p className="owner-property-location">
-                      📍 {property.location}
-                    </p>
-
-                    <h3>{property.name}</h3>
-
-                    <p className="owner-property-price">
-                      GH₵{" "}
-                      {Number(
-                        property.price
-                      ).toLocaleString()}
-                      <span>
-                        {" "}
-                        {property.period}
-                      </span>
-                    </p>
-
-                    <div className="owner-property-info">
-                      <span>
-                        🏠 {property.room_type}
-                      </span>
-
-                      <span>
-                        👥 {property.spaces} spaces
-                      </span>
                     </div>
 
-                    {property.walking_minutes && (
-                      <p className="walking-distance">
-                        🚶 {property.walking_minutes} mins
-                        walk to campus
+                    <div className="owner-property-content">
+                      <p className="owner-property-location">
+                        📍 {property.location}
                       </p>
-                    )}
 
-                    <div className="owner-property-actions">
-                      <button
-                        onClick={() =>
-                          router.push(
-                            `/property/${property.id}`
-                          )
-                        }
-                      >
-                        View
-                      </button>
+                      <h3>{property.name}</h3>
 
-                      <button
-                        onClick={() =>
-                          router.push(
-                            `/owner/edit-property/${property.id}`
-                          )
-                        }
-                      >
-                        Edit
-                      </button>
+                      <p className="owner-property-price">
+                        GH₵{" "}
+                        {Number(
+                          property.price
+                        ).toLocaleString()}
+                        <span>
+                          {" "}
+                          {property.period}
+                        </span>
+                      </p>
 
-                      <button
-                        className="delete-property-button"
-                        onClick={() =>
-                          deleteProperty(property.id)
-                        }
-                      >
-                        Delete
-                      </button>
+                      <div className="owner-property-info">
+                        <span>
+                          🏠 {property.room_type}
+                        </span>
+
+                        <span>
+                          👥 {property.spaces} spaces
+                        </span>
+                      </div>
+
+                      {property.walking_minutes && (
+                        <p className="walking-distance">
+                          🚶 {property.walking_minutes} mins
+                          walk to campus
+                        </p>
+                      )}
+
+                      {status === "pending" && (
+                        <p
+                          style={{
+                            marginTop: "12px",
+                            fontSize: "14px",
+                            lineHeight: 1.5,
+                            color: "#92400e",
+                          }}
+                        >
+                          Your property has been submitted
+                          and is waiting for admin approval.
+                        </p>
+                      )}
+
+                      {status === "rejected" && (
+                        <p
+                          style={{
+                            marginTop: "12px",
+                            fontSize: "14px",
+                            lineHeight: 1.5,
+                            color: "#991b1b",
+                          }}
+                        >
+                          Your property was not approved.
+                          You can edit the listing and update
+                          its details.
+                        </p>
+                      )}
+
+                      {status === "approved" && (
+                        <p
+                          style={{
+                            marginTop: "12px",
+                            fontSize: "14px",
+                            lineHeight: 1.5,
+                            color: "#166534",
+                          }}
+                        >
+                          Your property has been approved
+                          and is available to students.
+                        </p>
+                      )}
+
+                      <div className="owner-property-actions">
+                        <button
+                          onClick={() =>
+                            router.push(
+                              `/property/${property.id}`
+                            )
+                          }
+                        >
+                          View
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            router.push(
+                              `/owner/edit-property/${property.id}`
+                            )
+                          }
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          className="delete-property-button"
+                          onClick={() =>
+                            deleteProperty(property.id)
+                          }
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                </article>
-              ))}
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>

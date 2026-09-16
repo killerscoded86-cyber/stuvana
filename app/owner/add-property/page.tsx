@@ -51,11 +51,12 @@ export default function AddPropertyPage() {
       }
 
       // Check account type
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("account_type")
-        .eq("id", user.id)
-        .single();
+      const { data: profile, error: profileError } =
+        await supabase
+          .from("profiles")
+          .select("account_type")
+          .eq("id", user.id)
+          .single();
 
       if (profileError || profile?.account_type !== "owner") {
         alert("Only property owners can add properties.");
@@ -66,22 +67,20 @@ export default function AddPropertyPage() {
       // CALCULATE FINAL STUDENT DISPLAY PRICE
       // =====================================================
 
-      // Paystack Ghana local transaction fee
       const paystackFeeRate = 0.0195;
 
-      // Convert owner's price to pesewas
       const basePricePesewas = Math.round(basePrice * 100);
 
-      // Gross up the price so the Paystack processing fee
-      // is covered without reducing the owner's listed price.
       const displayPricePesewas = Math.ceil(
         basePricePesewas / (1 - paystackFeeRate)
       );
 
-      // Final price shown to students
       const displayPrice = displayPricePesewas / 100;
 
-      // 1. Create the property first
+      // =====================================================
+      // 1. CREATE PROPERTY
+      // =====================================================
+
       const { data: property, error: propertyError } =
         await supabase
           .from("properties")
@@ -89,13 +88,8 @@ export default function AddPropertyPage() {
             name,
             location,
             room_type: roomType,
-
-            // Original price set by the owner
             price: basePrice,
-
-            // Final price students see
             display_price: displayPrice,
-
             period,
             spaces: Number(spaces),
             university: university || null,
@@ -105,6 +99,9 @@ export default function AddPropertyPage() {
               : null,
             owner_id: user.id,
             image_url: null,
+
+            // New properties must wait for admin approval.
+            status: "pending",
           })
           .select()
           .single();
@@ -123,7 +120,10 @@ export default function AddPropertyPage() {
         sort_order: number;
       }[] = [];
 
-      // 2. Upload photos
+      // =====================================================
+      // 2. UPLOAD PHOTOS
+      // =====================================================
+
       for (let i = 0; i < photos.length; i++) {
         const photo = photos[i];
 
@@ -153,7 +153,10 @@ export default function AddPropertyPage() {
         });
       }
 
-      // 3. Upload video
+      // =====================================================
+      // 3. UPLOAD VIDEO
+      // =====================================================
+
       if (video) {
         const fileExt =
           video.name.split(".").pop()?.toLowerCase() || "mp4";
@@ -181,7 +184,10 @@ export default function AddPropertyPage() {
         });
       }
 
-      // 4. Save all media records
+      // =====================================================
+      // 4. SAVE ALL MEDIA RECORDS
+      // =====================================================
+
       if (mediaRows.length > 0) {
         const { error: mediaError } = await supabase
           .from("property_media")
@@ -192,19 +198,23 @@ export default function AddPropertyPage() {
         }
       }
 
-      // 5. Set the first photo as the property's main image
+      // =====================================================
+      // 5. FIRST UPLOADED PHOTO = COVER PHOTO
+      // =====================================================
+
       if (photos.length > 0 && mediaRows.length > 0) {
-        const firstImage = mediaRows.find(
+        const firstUploadedPhoto = mediaRows.find(
           (media) => media.media_type === "image"
         );
 
-        if (firstImage) {
+        if (firstUploadedPhoto) {
           const { error: imageUpdateError } = await supabase
             .from("properties")
             .update({
-              image_url: firstImage.public_url,
+              image_url: firstUploadedPhoto.public_url,
             })
-            .eq("id", propertyId);
+            .eq("id", propertyId)
+            .eq("owner_id", user.id);
 
           if (imageUpdateError) {
             throw imageUpdateError;
@@ -212,13 +222,15 @@ export default function AddPropertyPage() {
         }
       }
 
+      // =====================================================
+      // 6. PROPERTY SUBMITTED FOR ADMIN APPROVAL
+      // =====================================================
+
       alert(
-        video
-          ? "Property, photos and video uploaded successfully!"
-          : "Property and photos uploaded successfully!"
+        "Property submitted successfully! Your listing is now pending admin approval."
       );
 
-      router.push(`/property/${propertyId}`);
+      router.push("/owner/dashboard");
     } catch (error: any) {
       console.error("Add property error:", error);
 
@@ -249,7 +261,7 @@ export default function AddPropertyPage() {
         <h1>Add Property</h1>
 
         <p>
-          List your student accommodation on STUVANA.
+          Submit your student accommodation for admin review.
         </p>
       </section>
 
@@ -426,6 +438,8 @@ export default function AddPropertyPage() {
             <p className="upload-help">
               Upload photos of the rooms, exterior,
               kitchen, bathroom, surroundings, etc.
+              The first photo you select will be used as
+              the property's cover photo.
             </p>
 
             <input
@@ -442,7 +456,9 @@ export default function AddPropertyPage() {
             {photos.length > 0 && (
               <p className="selected-files">
                 {photos.length} photo
-                {photos.length > 1 ? "s" : ""} selected
+                {photos.length > 1 ? "s" : ""} selected.
+                The first selected photo will be the cover
+                photo.
               </p>
             )}
           </div>
@@ -477,8 +493,8 @@ export default function AddPropertyPage() {
             disabled={loading}
           >
             {loading
-              ? "Uploading Property..."
-              : "Publish Property"}
+              ? "Submitting Property..."
+              : "Submit for Approval"}
           </button>
         </form>
       </section>
