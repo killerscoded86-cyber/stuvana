@@ -62,7 +62,9 @@ export default function VerificationPage() {
       sdkRef.current = DiditSdk.shared;
 
       sdkRef.current.onComplete = (result: any) => {
-        const finalStatus = result?.session?.status || "Completed";
+        const finalStatus =
+          result?.session?.status || "Completed";
+
         setStatus(finalStatus);
         setStarted(false);
       };
@@ -72,7 +74,10 @@ export default function VerificationPage() {
         sdkError?: string
       ) => {
         if (state === "error") {
-          setError(sdkError || "Didit verification encountered an error.");
+          setError(
+            sdkError ||
+              "Didit verification encountered an error."
+          );
         }
       };
 
@@ -80,7 +85,8 @@ export default function VerificationPage() {
         url: data.url,
         configuration: {
           embedded: true,
-          embeddedContainerId: "didit-verification-container",
+          embeddedContainerId:
+            "didit-verification-container",
           loggingEnabled: false,
           showCloseButton: true,
           showExitConfirmation: true,
@@ -116,25 +122,44 @@ export default function VerificationPage() {
     <main
       style={{
         minHeight: "100vh",
-        padding: "32px 20px",
+        padding: "20px 12px",
         background: "#f8fafc",
       }}
     >
       <section
         style={{
+          width: "100%",
           maxWidth: "900px",
           margin: "0 auto",
           background: "#fff",
           borderRadius: "18px",
-          padding: "28px",
-          boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
+          padding: "24px 16px",
+          boxShadow:
+            "0 8px 30px rgba(0,0,0,0.08)",
+          boxSizing: "border-box",
         }}
       >
-        <h1>Identity Verification</h1>
+        <h1
+          style={{
+            margin: 0,
+            fontSize: "clamp(30px, 7vw, 48px)",
+            lineHeight: 1.1,
+            color: "#1f2937",
+          }}
+        >
+          Identity Verification
+        </h1>
 
-        <p style={{ color: "#666", lineHeight: 1.6 }}>
-          Complete your identity verification securely without leaving
-          STUVANA.
+        <p
+          style={{
+            color: "#666",
+            lineHeight: 1.6,
+            fontSize: "16px",
+            marginTop: "14px",
+          }}
+        >
+          Complete your identity verification securely
+          without leaving STUVANA.
         </p>
 
         {error && (
@@ -172,11 +197,18 @@ export default function VerificationPage() {
             disabled={loading}
             style={{
               marginTop: "24px",
-              padding: "14px 22px",
+              width: "100%",
+              maxWidth: "420px",
+              padding: "15px 20px",
               border: "none",
               borderRadius: "10px",
+              background: "#15803d",
+              color: "#fff",
               fontWeight: 700,
-              cursor: loading ? "not-allowed" : "pointer",
+              fontSize: "16px",
+              cursor: loading
+                ? "not-allowed"
+                : "pointer",
             }}
           >
             {loading
@@ -195,6 +227,7 @@ export default function VerificationPage() {
               borderRadius: "8px",
               border: "1px solid #ddd",
               background: "#fff",
+              color: "#111827",
               cursor: "pointer",
             }}
           >
@@ -202,14 +235,20 @@ export default function VerificationPage() {
           </button>
         )}
 
-        <div
-          id="didit-verification-container"
-          style={{
-            width: "100%",
-            minHeight: "700px",
-            marginTop: "24px",
-          }}
-        />
+        {started && (
+          <div
+            id="didit-verification-container"
+            style={{
+              width: "100%",
+              height: "min(800px, 80vh)",
+              minHeight: "600px",
+              marginTop: "20px",
+              overflow: "hidden",
+              borderRadius: "12px",
+              boxSizing: "border-box",
+            }}
+          />
+        )}
       </section>
     </main>
   );
