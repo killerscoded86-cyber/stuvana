@@ -32,10 +32,17 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
+      const redirectUrl =
+        typeof window !== "undefined"
+          ? `${window.location.origin}/login`
+          : undefined;
+
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
         options: {
+          emailRedirectTo: redirectUrl,
+
           data: {
             full_name: fullName.trim(),
             phone: phone.trim(),
@@ -65,7 +72,7 @@ export default function SignupPage() {
       }
 
       alert(
-        "Account created successfully! Check your email if confirmation is required."
+        "Account created successfully! Check your email to verify your account."
       );
 
       router.push("/login");

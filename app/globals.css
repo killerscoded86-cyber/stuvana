@@ -2333,3 +2333,132 @@ select {
     justify-content: flex-end;
   }
 }
+/* =========================
+   LOGIN PAGE — MATCH SIGNUP
+========================= */
+
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 30px;
+  background: linear-gradient(135deg, #ecfdf5, #ffffff);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 500px;
+  background: white;
+  padding: 40px;
+  border-radius: 18px;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1);
+}
+
+.auth-card .logo {
+  display: inline-block;
+  text-decoration: none;
+  font-size: 25px;
+  font-weight: 800;
+  color: #15803d;
+  margin-bottom: 35px;
+}
+
+.auth-header {
+  margin-bottom: 28px;
+}
+
+.auth-header .hero-label {
+  margin-bottom: 8px;
+}
+
+.auth-header h1 {
+  font-size: 32px;
+  margin-bottom: 10px;
+  color: #111827;
+}
+
+.auth-header p:last-child {
+  color: #6b7280;
+  line-height: 1.6;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  font-weight: 600;
+  margin-bottom: 8px;
+  margin-top: 14px;
+}
+
+.form-group input {
+  padding: 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 15px;
+  outline: none;
+}
+
+.form-group input:focus {
+  border-color: #15803d;
+}
+
+.auth-submit-button {
+  padding: 14px;
+  margin-top: 24px;
+  background: #15803d;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.auth-submit-button:hover {
+  background: #166534;
+}
+
+.auth-submit-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.auth-footer {
+  text-align: center;
+  margin-top: 24px;
+  color: #6b7280;
+}
+
+.auth-footer button {
+  border: none;
+  background: none;
+  padding: 0;
+  color: #15803d;
+  font-weight: 700;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.auth-footer button:hover {
+  text-decoration: underline;
+}
+
+/* Mobile */
+@media (max-width: 500px) {
+  .auth-card {
+    padding: 28px 22px;
+  }
+
+  .auth-header h1 {
+    font-size: 28px;
+  }
+}
