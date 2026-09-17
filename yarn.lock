@@ -146,6 +146,11 @@
     "@babel/helper-string-parser" "^7.29.7"
     "@babel/helper-validator-identifier" "^7.29.7"
 
+"@didit-protocol/sdk-web@^0.3.1":
+  version "0.3.1"
+  resolved "https://registry.yarnpkg.com/@didit-protocol/sdk-web/-/sdk-web-0.3.1.tgz#d5a66135892bc192ee786443af68abdf2f54aec4"
+  integrity sha512-5ahsxPfmMJw02AQBtOFpMPhYUvqKGP1JpfcoJPwRcSYNxytqWj+wUYxlezYqHAKI77I+u/d+gLdzbMijEoco5g==
+
 "@emnapi/core@1.10.0":
   version "1.10.0"
   resolved "https://registry.yarnpkg.com/@emnapi/core/-/core-1.10.0.tgz#380ccc8f2412ea22d1d972df7f8ee23a3b9c7467"
