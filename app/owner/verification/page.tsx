@@ -6,13 +6,148 @@ import { supabase } from "../../../lib/supabase";
 
 export default function VerificationPage() {
   const router = useRouter();
+
   const sdkRef = useRef<any>(null);
+  const sessionUrlRef = useRef<string | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [started, setStarted] = useState(false);
+  const [sessionUrl, setSessionUrl] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
+  /*
+   * Start Didit only AFTER React has rendered
+   * the verification container.
+   */
+  useEffect(() => {
+    if (!started || !sessionUrl) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function launchDidit() {
+      try {
+        const { DiditSdk } = await import("@didit-protocol/sdk-web");
+
+        if (cancelled) {
+          return;
+        }
+
+        sdkRef.current = DiditSdk.shared;
+
+        sdkRef.current.onComplete = (result: any) => {
+          console.log("Didit completion result:", result);
+
+          /*
+           * Didit can return:
+           * completed
+           * cancelled
+           * failed
+           */
+
+          if (result?.type === "completed") {
+            const diditStatus = result?.session?.status;
+
+            if (diditStatus) {
+              setStatus(`Verification status: ${diditStatus}`);
+            } else {
+              setStatus("Verification completed. Status is being processed.");
+            }
+
+            setStarted(false);
+            setSessionUrl(null);
+            return;
+          }
+
+          if (result?.type === "cancelled") {
+            setStatus("Verification cancelled.");
+            setStarted(false);
+            setSessionUrl(null);
+            return;
+          }
+
+          if (result?.type === "failed") {
+            setError(
+              result?.error?.message ||
+                "Didit verification failed. Please try again."
+            );
+
+            setStarted(false);
+            setSessionUrl(null);
+            return;
+          }
+
+          /*
+           * Unknown result:
+           * Never call this a successful verification.
+           */
+          setError(
+            "Verification ended without a confirmed verification result."
+          );
+
+          setStarted(false);
+          setSessionUrl(null);
+        };
+
+        sdkRef.current.onStateChange = (
+          state: string,
+          sdkError?: string
+        ) => {
+          console.log("Didit state:", state, sdkError);
+
+          if (state === "error") {
+            setError(
+              sdkError ||
+                "Didit verification encountered an error."
+            );
+          }
+        };
+
+        sdkRef.current.startVerification({
+          url: sessionUrl,
+          configuration: {
+            embedded: true,
+            embeddedContainerId:
+              "didit-verification-container",
+            loggingEnabled: true,
+            showCloseButton: true,
+            showExitConfirmation: true,
+            closeModalOnComplete: false,
+          },
+        });
+      } catch (err) {
+        console.error("Didit launch error:", err);
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Could not launch identity verification."
+        );
+
+        setStarted(false);
+        setSessionUrl(null);
+      }
+    }
+
+    /*
+     * Give React one frame to render the container
+     * before Didit tries to mount inside it.
+     */
+    const frame = requestAnimationFrame(() => {
+      launchDidit();
+    });
+
+    return () => {
+      cancelAnimationFrame(frame);
+      cancelled = true;
+    };
+  }, [started, sessionUrl]);
+
+  /*
+   * Clean up Didit only when leaving the page.
+   */
   useEffect(() => {
     return () => {
       try {
@@ -39,6 +174,9 @@ export default function VerificationPage() {
         return;
       }
 
+      /*
+       * Ask our backend for a NEW Didit verification session.
+       */
       const response = await fetch("/api/didit/create-session", {
         method: "POST",
         headers: {
@@ -53,50 +191,23 @@ export default function VerificationPage() {
 
       if (!response.ok || !data?.url) {
         throw new Error(
-          data?.error || "Could not start identity verification."
+          data?.error ||
+            "Could not create a new verification session."
         );
       }
 
-      const { DiditSdk } = await import("@didit-protocol/sdk-web");
+      console.log("New Didit session created.");
 
-      sdkRef.current = DiditSdk.shared;
+      sessionUrlRef.current = data.url;
 
-      sdkRef.current.onComplete = (result: any) => {
-        const finalStatus =
-          result?.session?.status || "Completed";
-
-        setStatus(finalStatus);
-        setStarted(false);
-      };
-
-      sdkRef.current.onStateChange = (
-        state: string,
-        sdkError?: string
-      ) => {
-        if (state === "error") {
-          setError(
-            sdkError ||
-              "Didit verification encountered an error."
-          );
-        }
-      };
-
-      sdkRef.current.startVerification({
-        url: data.url,
-        configuration: {
-          embedded: true,
-          embeddedContainerId:
-            "didit-verification-container",
-          loggingEnabled: false,
-          showCloseButton: true,
-          showExitConfirmation: true,
-          closeModalOnComplete: false,
-        },
-      });
-
+      /*
+       * First render the Didit container.
+       * The useEffect above will then start Didit.
+       */
+      setSessionUrl(data.url);
       setStarted(true);
     } catch (err) {
-      console.error("Didit error:", err);
+      console.error("Didit session error:", err);
 
       setError(
         err instanceof Error
@@ -116,6 +227,7 @@ export default function VerificationPage() {
     }
 
     setStarted(false);
+    setSessionUrl(null);
   }
 
   return (
@@ -170,6 +282,7 @@ export default function VerificationPage() {
               borderRadius: "10px",
               background: "#fee2e2",
               color: "#991b1b",
+              lineHeight: 1.5,
             }}
           >
             {error}
@@ -184,9 +297,10 @@ export default function VerificationPage() {
               borderRadius: "10px",
               background: "#f0fdf4",
               color: "#166534",
+              lineHeight: 1.5,
             }}
           >
-            Verification status: {status}
+            {status}
           </div>
         )}
 
@@ -240,12 +354,11 @@ export default function VerificationPage() {
             id="didit-verification-container"
             style={{
               width: "100%",
-              height: "min(800px, 80vh)",
-              minHeight: "600px",
+              height: "800px",
               marginTop: "20px",
-              overflow: "hidden",
               borderRadius: "12px",
               boxSizing: "border-box",
+              overflow: "auto",
             }}
           />
         )}
