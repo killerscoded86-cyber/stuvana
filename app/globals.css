@@ -2314,3 +2314,22 @@ select {
   font-size: 13px;
   font-weight: 600;
 }
+/* MOBILE AUTH BUTTONS */
+@media (max-width: 768px) {
+  nav div > a:has(button) {
+    display: inline-flex !important;
+    text-decoration: none;
+  }
+
+  nav div > a:has(button) button {
+    display: inline-flex !important;
+    padding: 9px 12px;
+    font-size: 13px;
+  }
+
+  nav div {
+    gap: 7px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}
