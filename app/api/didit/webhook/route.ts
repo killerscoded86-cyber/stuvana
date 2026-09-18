@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
+import { supabaseAdmin } from "../../../../lib/supabaseAdmin";
 
 type JsonValue =
   | string
@@ -94,8 +95,12 @@ export async function POST(request: NextRequest) {
 
     if (!secret) {
       console.error("DIDIT_WEBHOOK_SECRET is missing.");
+
       return NextResponse.json(
-        { success: false, message: "Webhook secret is not configured." },
+        {
+          success: false,
+          message: "Webhook secret is not configured.",
+        },
         { status: 500 }
       );
     }
@@ -105,12 +110,20 @@ export async function POST(request: NextRequest) {
 
     if (!signature || !timestamp) {
       return NextResponse.json(
-        { success: false, message: "Missing Didit signature headers." },
+        {
+          success: false,
+          message: "Missing Didit signature headers.",
+        },
         { status: 401 }
       );
     }
 
-    const body = (await request.json()) as JsonValue;
+    /*
+     * Read the body and verify the Didit signature.
+     */
+    const rawBody = await request.text();
+
+    const body = JSON.parse(rawBody) as JsonValue;
 
     const verified = verifySignatureV2(
       body,
@@ -121,8 +134,12 @@ export async function POST(request: NextRequest) {
 
     if (!verified) {
       console.error("Invalid Didit webhook signature.");
+
       return NextResponse.json(
-        { success: false, message: "Invalid signature." },
+        {
+          success: false,
+          message: "Invalid signature.",
+        },
         { status: 401 }
       );
     }
@@ -136,26 +153,230 @@ export async function POST(request: NextRequest) {
       status?: string;
       vendor_data?: string;
       environment?: string;
+      timestamp?: string;
+      decision?: {
+        id_verification?: {
+          document_type?: string;
+        };
+      };
     };
 
     console.log("Event:", webhook.webhook_type);
+    console.log("Event ID:", webhook.event_id);
     console.log("Session:", webhook.session_id);
     console.log("Status:", webhook.status);
     console.log("Vendor data:", webhook.vendor_data);
     console.log("Environment:", webhook.environment);
 
+    /*
+     * We only use session status updates to change
+     * the STUVANA verification status.
+     */
+    if (webhook.webhook_type !== "status.updated") {
+      return NextResponse.json(
+        {
+          success: true,
+          message: "Webhook received. No status update required.",
+        },
+        { status: 200 }
+      );
+    }
+
+    const userId = webhook.vendor_data;
+
+    if (!userId) {
+      console.error(
+        "Didit webhook does not contain vendor_data."
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Missing vendor_data.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!webhook.session_id) {
+      console.error(
+        "Didit webhook does not contain session_id."
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Missing session_id.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const diditStatus = String(
+      webhook.status || ""
+    ).trim();
+
+    /*
+     * Approved = identity successfully verified.
+     */
+    if (diditStatus === "Approved") {
+      const { error } = await supabaseAdmin
+        .from("profiles")
+        .update({
+          verification_status: "verified",
+          verification_reference: webhook.session_id,
+          verification_id_type:
+            webhook.decision?.id_verification
+              ?.document_type || "Didit",
+          verification_verified_at:
+            new Date().toISOString(),
+          verification_rejection_reason: null,
+        })
+        .eq("id", userId);
+
+      if (error) {
+        console.error(
+          "Failed to update verified profile:",
+          error
+        );
+
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Failed to update profile.",
+          },
+          { status: 500 }
+        );
+      }
+
+      console.log(
+        `STUVANA user ${userId} is now VERIFIED.`
+      );
+
+      return NextResponse.json(
+        {
+          success: true,
+          message: "Verification approved and profile updated.",
+        },
+        { status: 200 }
+      );
+    }
+
+    /*
+     * Pending / In Review means the verification
+     * has been submitted but Didit has not approved it yet.
+     */
+    if (
+      diditStatus === "Pending" ||
+      diditStatus === "In Review"
+    ) {
+      const { error } = await supabaseAdmin
+        .from("profiles")
+        .update({
+          verification_status: "pending",
+          verification_reference: webhook.session_id,
+          verification_submitted_at:
+            new Date().toISOString(),
+          verification_rejection_reason: null,
+        })
+        .eq("id", userId);
+
+      if (error) {
+        console.error(
+          "Failed to update pending profile:",
+          error
+        );
+
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Failed to update profile.",
+          },
+          { status: 500 }
+        );
+      }
+
+      console.log(
+        `STUVANA user ${userId} verification is PENDING.`
+      );
+
+      return NextResponse.json(
+        {
+          success: true,
+          message: "Verification pending.",
+        },
+        { status: 200 }
+      );
+    }
+
+    /*
+     * Declined means Didit did not approve the identity.
+     */
+    if (diditStatus === "Declined") {
+      const { error } = await supabaseAdmin
+        .from("profiles")
+        .update({
+          verification_status: "rejected",
+          verification_reference: webhook.session_id,
+          verification_rejection_reason:
+            "Didit verification was declined.",
+        })
+        .eq("id", userId);
+
+      if (error) {
+        console.error(
+          "Failed to update rejected profile:",
+          error
+        );
+
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Failed to update profile.",
+          },
+          { status: 500 }
+        );
+      }
+
+      console.log(
+        `STUVANA user ${userId} verification was REJECTED.`
+      );
+
+      return NextResponse.json(
+        {
+          success: true,
+          message: "Verification declined.",
+        },
+        { status: 200 }
+      );
+    }
+
+    /*
+     * Unknown Didit status.
+     * Do not mark the user as verified.
+     */
+    console.log(
+      `Unhandled Didit status: ${diditStatus}`
+    );
+
     return NextResponse.json(
       {
         success: true,
-        message: "Didit webhook verified successfully.",
+        message: "Webhook received. Status not handled.",
       },
       { status: 200 }
     );
   } catch (error) {
-    console.error("Didit webhook error:", error);
+    console.error(
+      "Didit webhook error:",
+      error
+    );
 
     return NextResponse.json(
-      { success: false, message: "Invalid webhook request." },
+      {
+        success: false,
+        message: "Invalid webhook request.",
+      },
       { status: 400 }
     );
   }
