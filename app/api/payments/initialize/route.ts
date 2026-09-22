@@ -433,12 +433,29 @@ export async function POST(request: Request) {
       authorization_url:
         paystackData.data
           .authorization_url,
+
       reference,
+
+      // Payment amounts
       amount,
       totalAmount,
+      paymentProcessingFee,
+
+      // STUVANA commission
       commissionRate,
       commissionAmount,
+
+      // Owner earnings
       ownerAmount,
+
+      // Useful for the booking summary
+      currency: "GHS",
+      propertyName:
+        property.name,
+      roomType:
+        property.room_type,
+      period:
+        property.period,
     });
   } catch (error) {
     console.error(

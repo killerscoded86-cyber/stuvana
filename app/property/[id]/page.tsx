@@ -30,6 +30,12 @@ export default function PropertyDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
 
+  const [paymentSummary, setPaymentSummary] =
+    useState<any>(null);
+
+  const [loadingPaymentSummary, setLoadingPaymentSummary] =
+    useState(false);
+
   const propertyId = Number(params?.id);
 
   useEffect(() => {
@@ -366,6 +372,122 @@ export default function PropertyDetailsPage() {
 
       setPaying(false);
     }
+  }
+
+  async function loadPaymentSummary() {
+    if (!user) {
+      alert(
+        "Please log in as a student before booking."
+      );
+
+      router.push("/login");
+      return;
+    }
+
+    if (accountType !== "student") {
+      alert(
+        "Only student accounts can book accommodation."
+      );
+
+      return;
+    }
+
+    if (!property) return;
+
+    const currentSpaces =
+      Number(property.spaces);
+
+    if (
+      Number.isFinite(
+        currentSpaces
+      ) &&
+      currentSpaces <= 0
+    ) {
+      alert(
+        "This accommodation is currently unavailable."
+      );
+
+      return;
+    }
+
+    setLoadingPaymentSummary(true);
+
+    try {
+      const {
+        data: { session },
+      } =
+        await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        alert(
+          "Your login session has expired. Please log in again."
+        );
+
+        router.push("/login");
+        return;
+      }
+
+      const response =
+        await fetch(
+          "/api/payments/initialize",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+              propertyId:
+                property.id,
+              email: user.email,
+            }),
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+        console.error(
+          "Payment summary error:",
+          data
+        );
+
+        alert(
+          data.error ||
+            "Could not prepare your booking."
+        );
+
+        return;
+      }
+
+      setPaymentSummary(data);
+    } catch (error) {
+      console.error(
+        "Payment summary error:",
+        error
+      );
+
+      alert(
+        "Something went wrong while preparing your booking."
+      );
+    } finally {
+      setLoadingPaymentSummary(false);
+    }
+  }
+
+  async function continueToPayment() {
+    if (
+      !paymentSummary?.authorization_url
+    ) {
+      return;
+    }
+
+    setPaying(true);
+
+    window.location.href =
+      paymentSummary.authorization_url;
   }
 
   if (loading) {
@@ -1098,43 +1220,327 @@ export default function PropertyDetailsPage() {
                 payment.
               </p>
 
-              <button
-                className="details-primary-button"
-                onClick={
-                  handlePayment
-                }
-                disabled={
-                  paying ||
-                  roomUnavailable
-                }
-                type="button"
-                style={{
-                  width:
-                    "100%",
-                  cursor:
-                    paying ||
+              {!paymentSummary ? (
+                <button
+                  className="details-primary-button"
+                  onClick={
+                    loadPaymentSummary
+                  }
+                  disabled={
+                    loadingPaymentSummary ||
                     roomUnavailable
-                      ? "not-allowed"
-                      : "pointer",
-                  opacity:
-                    paying ||
-                    roomUnavailable
-                      ? 0.7
-                      : 1,
-                }}
-              >
-                {roomUnavailable
-                  ? "Room Unavailable"
-                  : paying
-                  ? "Opening Paystack..."
-                  : `Pay GH₵ ${
-                      Number.isFinite(
-                        price
+                  }
+                  type="button"
+                  style={{
+                    width:
+                      "100%",
+                    cursor:
+                      loadingPaymentSummary ||
+                      roomUnavailable
+                        ? "not-allowed"
+                        : "pointer",
+                    opacity:
+                      loadingPaymentSummary ||
+                      roomUnavailable
+                        ? 0.7
+                        : 1,
+                  }}
+                >
+                  {roomUnavailable
+                    ? "Room Unavailable"
+                    : loadingPaymentSummary
+                    ? "Preparing Booking..."
+                    : "Review Booking"}
+                </button>
+              ) : (
+                <div
+                  style={{
+                    marginTop:
+                      "10px",
+                    padding:
+                      "20px",
+                    borderRadius:
+                      "14px",
+                    background:
+                      "#ffffff",
+                    border:
+                      "1px solid rgba(0,0,0,0.08)",
+                  }}
+                >
+                  <p
+                    className="hero-label"
+                    style={{
+                      marginBottom:
+                        "6px",
+                    }}
+                  >
+                    BOOKING SUMMARY
+                  </p>
+
+                  <h3
+                    style={{
+                      marginBottom:
+                        "16px",
+                    }}
+                  >
+                    {
+                      paymentSummary.propertyName ||
+                      property.name
+                    }
+                  </h3>
+
+                  <div
+                    style={{
+                      display:
+                        "flex",
+                      flexDirection:
+                        "column",
+                      gap: "12px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display:
+                          "flex",
+                        justifyContent:
+                          "space-between",
+                        gap: "16px",
+                      }}
+                    >
+                      <span>
+                        Room
+                      </span>
+
+                      <strong>
+                        {
+                          paymentSummary.roomType ||
+                          property.room_type
+                        }
+                      </strong>
+                    </div>
+
+                    <div
+                      style={{
+                        display:
+                          "flex",
+                        justifyContent:
+                          "space-between",
+                        gap: "16px",
+                      }}
+                    >
+                      <span>
+                        Payment period
+                      </span>
+
+                      <strong>
+                        {
+                          paymentSummary.period ||
+                          property.period
+                        }
+                      </strong>
+                    </div>
+
+                    <div
+                      style={{
+                        display:
+                          "flex",
+                        justifyContent:
+                          "space-between",
+                        gap: "16px",
+                      }}
+                    >
+                      <span>
+                        Accommodation
+                      </span>
+
+                      <strong>
+                        GH₵{" "}
+                        {Number(
+                          paymentSummary.amount ||
+                            0
+                        ).toLocaleString(
+                          undefined,
+                          {
+                            minimumFractionDigits:
+                              2,
+                            maximumFractionDigits:
+                              2,
+                          }
+                        )}
+                      </strong>
+                    </div>
+
+                    <div
+                      style={{
+                        display:
+                          "flex",
+                        justifyContent:
+                          "space-between",
+                        gap: "16px",
+                      }}
+                    >
+                      <span>
+                        Payment processing
+                      </span>
+
+                      <strong>
+                        GH₵{" "}
+                        {Number(
+                          paymentSummary.paymentProcessingFee ||
+                            0
+                        ).toLocaleString(
+                          undefined,
+                          {
+                            minimumFractionDigits:
+                              2,
+                            maximumFractionDigits:
+                              2,
+                          }
+                        )}
+                      </strong>
+                    </div>
+
+                    <div
+                      style={{
+                        height:
+                          "1px",
+                        background:
+                          "rgba(0,0,0,0.1)",
+                        margin:
+                          "4px 0",
+                      }}
+                    />
+
+                    <div
+                      style={{
+                        display:
+                          "flex",
+                        justifyContent:
+                          "space-between",
+                        gap: "16px",
+                        fontSize:
+                          "18px",
+                      }}
+                    >
+                      <strong>
+                        Total to pay
+                      </strong>
+
+                      <strong>
+                        GH₵{" "}
+                        {Number(
+                          paymentSummary.totalAmount ||
+                            0
+                        ).toLocaleString(
+                          undefined,
+                          {
+                            minimumFractionDigits:
+                              2,
+                            maximumFractionDigits:
+                              2,
+                          }
+                        )}
+                      </strong>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop:
+                        "18px",
+                      padding:
+                        "12px",
+                      borderRadius:
+                        "10px",
+                      background:
+                        "#f0fdf4",
+                      color:
+                        "#166534",
+                      fontSize:
+                        "13px",
+                      lineHeight:
+                        "1.5",
+                    }}
+                  >
+                    🔒 You will be
+                    redirected to
+                    Paystack to
+                    complete this
+                    payment securely.
+                  </div>
+
+                  <button
+                    className="details-primary-button"
+                    onClick={
+                      continueToPayment
+                    }
+                    disabled={
+                      paying
+                    }
+                    type="button"
+                    style={{
+                      width:
+                        "100%",
+                      marginTop:
+                        "16px",
+                      cursor:
+                        paying
+                          ? "not-allowed"
+                          : "pointer",
+                      opacity:
+                        paying
+                          ? 0.7
+                          : 1,
+                    }}
+                  >
+                    {paying
+                      ? "Opening Paystack..."
+                      : `Continue to Pay GH₵ ${Number(
+                          paymentSummary.totalAmount ||
+                            0
+                        ).toLocaleString(
+                          undefined,
+                          {
+                            minimumFractionDigits:
+                              2,
+                            maximumFractionDigits:
+                              2,
+                          }
+                        )}`}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPaymentSummary(
+                        null
                       )
-                        ? price.toLocaleString()
-                        : "0"
-                    }`}
-              </button>
+                    }
+                    disabled={
+                      paying
+                    }
+                    style={{
+                      width:
+                        "100%",
+                      marginTop:
+                        "10px",
+                      padding:
+                        "10px",
+                      border: 0,
+                      background:
+                        "transparent",
+                      color:
+                        "#666",
+                      cursor:
+                        paying
+                          ? "not-allowed"
+                          : "pointer",
+                    }}
+                  >
+                    ← Back
+                  </button>
+                </div>
+              )}
 
               <p
                 style={{
