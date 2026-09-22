@@ -2,60 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { supabaseAdmin } from "../../../../lib/supabaseAdmin";
 
-type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | JsonValue[]
-  | { [key: string]: JsonValue };
-
-function shortenFloats(data: JsonValue): JsonValue {
-  if (Array.isArray(data)) {
-    return data.map(shortenFloats);
-  }
-
-  if (data !== null && typeof data === "object") {
-    const result: { [key: string]: JsonValue } = {};
-
-    for (const [key, value] of Object.entries(data)) {
-      result[key] = shortenFloats(value);
-    }
-
-    return result;
-  }
-
-  if (
-    typeof data === "number" &&
-    !Number.isInteger(data) &&
-    data % 1 === 0
-  ) {
-    return Math.trunc(data);
-  }
-
-  return data;
-}
-
-function sortKeys(data: JsonValue): JsonValue {
-  if (Array.isArray(data)) {
-    return data.map(sortKeys);
-  }
-
-  if (data !== null && typeof data === "object") {
-    const result: { [key: string]: JsonValue } = {};
-
-    for (const key of Object.keys(data).sort()) {
-      result[key] = sortKeys(data[key]);
-    }
-
-    return result;
-  }
-
-  return data;
-}
-
 function verifySignatureV2(
-  body: JsonValue,
+  rawBody: string,
   signature: string,
   timestamp: string,
   secret: string
@@ -67,17 +15,14 @@ function verifySignatureV2(
     return false;
   }
 
+  // Reject webhooks older than 5 minutes.
   if (Math.abs(now - incomingTimestamp) > 300) {
     return false;
   }
 
-  const canonicalBody = JSON.stringify(
-    sortKeys(shortenFloats(body))
-  );
-
   const expectedSignature = crypto
     .createHmac("sha256", secret)
-    .update(canonicalBody, "utf8")
+    .update(rawBody, "utf8")
     .digest("hex");
 
   const expected = Buffer.from(expectedSignature, "utf8");
@@ -118,15 +63,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    /*
-     * Read the body and verify the Didit signature.
-     */
+    // Read the raw body before parsing.
     const rawBody = await request.text();
 
-    const body = JSON.parse(rawBody) as JsonValue;
-
+    // Verify Didit's signature against the raw body.
     const verified = verifySignatureV2(
-      body,
+      rawBody,
       signature,
       timestamp,
       secret
@@ -144,7 +86,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log("Verified Didit webhook:", body);
+    let body: any;
+
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Invalid JSON payload.",
+        },
+        { status: 400 }
+      );
+    }
+
+    /*
+     * Do NOT log the complete Didit body.
+     * It can contain sensitive identity information.
+     */
 
     const webhook = body as {
       webhook_type?: string;
@@ -153,24 +112,26 @@ export async function POST(request: NextRequest) {
       status?: string;
       vendor_data?: string;
       environment?: string;
-      timestamp?: string;
       decision?: {
-        id_verification?: {
+        id_verifications?: Array<{
+          status?: string;
           document_type?: string;
-        };
+        }>;
       };
     };
 
-    console.log("Event:", webhook.webhook_type);
-    console.log("Event ID:", webhook.event_id);
-    console.log("Session:", webhook.session_id);
-    console.log("Status:", webhook.status);
-    console.log("Vendor data:", webhook.vendor_data);
-    console.log("Environment:", webhook.environment);
+    console.log("Didit webhook received:", {
+      event: webhook.webhook_type,
+      eventId: webhook.event_id,
+      sessionId: webhook.session_id,
+      status: webhook.status,
+      vendorData: webhook.vendor_data,
+      environment: webhook.environment,
+    });
 
     /*
-     * We only use session status updates to change
-     * the STUVANA verification status.
+     * Only status.updated changes the STUVANA
+     * verification status.
      */
     if (webhook.webhook_type !== "status.updated") {
       return NextResponse.json(
@@ -183,11 +144,10 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = webhook.vendor_data;
+    const sessionId = webhook.session_id;
 
     if (!userId) {
-      console.error(
-        "Didit webhook does not contain vendor_data."
-      );
+      console.error("Didit webhook is missing vendor_data.");
 
       return NextResponse.json(
         {
@@ -198,10 +158,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!webhook.session_id) {
-      console.error(
-        "Didit webhook does not contain session_id."
-      );
+    if (!sessionId) {
+      console.error("Didit webhook is missing session_id.");
 
       return NextResponse.json(
         {
@@ -212,33 +170,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const diditStatus = String(
-      webhook.status || ""
-    ).trim();
+    const diditStatus = String(webhook.status || "")
+      .trim()
+      .toLowerCase();
+
+    const documentType =
+      webhook.decision?.id_verifications?.[0]?.document_type ||
+      "Didit";
 
     /*
-     * Approved = identity successfully verified.
+     * =====================================================
+     * APPROVED
+     * =====================================================
      */
-    if (diditStatus === "Approved") {
-      const { error } = await supabaseAdmin
+
+    if (diditStatus === "approved") {
+      const { data, error } = await supabaseAdmin
         .from("profiles")
         .update({
           verification_status: "verified",
-          verification_reference: webhook.session_id,
-          verification_id_type:
-            webhook.decision?.id_verification
-              ?.document_type || "Didit",
-          verification_verified_at:
-            new Date().toISOString(),
+          verification_reference: sessionId,
+          verification_id_type: documentType,
+          verification_verified_at: new Date().toISOString(),
           verification_rejection_reason: null,
         })
-        .eq("id", userId);
+        .eq("id", userId)
+        .select("id, verification_status")
+        .maybeSingle();
 
       if (error) {
-        console.error(
-          "Failed to update verified profile:",
-          error
-        );
+        console.error("Supabase verified update failed:", {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+        });
 
         return NextResponse.json(
           {
@@ -249,8 +215,23 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      if (!data) {
+        console.error(
+          "No profile found for Didit vendor_data:",
+          userId
+        );
+
+        return NextResponse.json(
+          {
+            success: false,
+            message: "STUVANA profile not found.",
+          },
+          { status: 404 }
+        );
+      }
+
       console.log(
-        `STUVANA user ${userId} is now VERIFIED.`
+        `STUVANA verification approved for user ${userId}.`
       );
 
       return NextResponse.json(
@@ -263,29 +244,35 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * Pending / In Review means the verification
-     * has been submitted but Didit has not approved it yet.
+     * =====================================================
+     * PENDING / IN REVIEW
+     * =====================================================
      */
+
     if (
-      diditStatus === "Pending" ||
-      diditStatus === "In Review"
+      diditStatus === "pending" ||
+      diditStatus === "in review" ||
+      diditStatus === "in_review"
     ) {
-      const { error } = await supabaseAdmin
+      const { data, error } = await supabaseAdmin
         .from("profiles")
         .update({
           verification_status: "pending",
-          verification_reference: webhook.session_id,
-          verification_submitted_at:
-            new Date().toISOString(),
+          verification_reference: sessionId,
+          verification_submitted_at: new Date().toISOString(),
           verification_rejection_reason: null,
         })
-        .eq("id", userId);
+        .eq("id", userId)
+        .select("id, verification_status")
+        .maybeSingle();
 
       if (error) {
-        console.error(
-          "Failed to update pending profile:",
-          error
-        );
+        console.error("Supabase pending update failed:", {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+        });
 
         return NextResponse.json(
           {
@@ -296,8 +283,23 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      if (!data) {
+        console.error(
+          "No profile found for Didit vendor_data:",
+          userId
+        );
+
+        return NextResponse.json(
+          {
+            success: false,
+            message: "STUVANA profile not found.",
+          },
+          { status: 404 }
+        );
+      }
+
       console.log(
-        `STUVANA user ${userId} verification is PENDING.`
+        `STUVANA verification pending for user ${userId}.`
       );
 
       return NextResponse.json(
@@ -310,24 +312,34 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * Declined means Didit did not approve the identity.
+     * =====================================================
+     * DECLINED / REJECTED
+     * =====================================================
      */
-    if (diditStatus === "Declined") {
-      const { error } = await supabaseAdmin
+
+    if (
+      diditStatus === "declined" ||
+      diditStatus === "rejected"
+    ) {
+      const { data, error } = await supabaseAdmin
         .from("profiles")
         .update({
           verification_status: "rejected",
-          verification_reference: webhook.session_id,
+          verification_reference: sessionId,
           verification_rejection_reason:
             "Didit verification was declined.",
         })
-        .eq("id", userId);
+        .eq("id", userId)
+        .select("id, verification_status")
+        .maybeSingle();
 
       if (error) {
-        console.error(
-          "Failed to update rejected profile:",
-          error
-        );
+        console.error("Supabase rejected update failed:", {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+        });
 
         return NextResponse.json(
           {
@@ -338,8 +350,23 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      if (!data) {
+        console.error(
+          "No profile found for Didit vendor_data:",
+          userId
+        );
+
+        return NextResponse.json(
+          {
+            success: false,
+            message: "STUVANA profile not found.",
+          },
+          { status: 404 }
+        );
+      }
+
       console.log(
-        `STUVANA user ${userId} verification was REJECTED.`
+        `STUVANA verification rejected for user ${userId}.`
       );
 
       return NextResponse.json(
@@ -352,11 +379,13 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * Unknown Didit status.
-     * Do not mark the user as verified.
+     * =====================================================
+     * OTHER DIDIT STATUS
+     * =====================================================
      */
+
     console.log(
-      `Unhandled Didit status: ${diditStatus}`
+      `Unhandled Didit status: ${webhook.status}`
     );
 
     return NextResponse.json(
@@ -367,17 +396,14 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
-    console.error(
-      "Didit webhook error:",
-      error
-    );
+    console.error("Didit webhook error:", error);
 
     return NextResponse.json(
       {
         success: false,
-        message: "Invalid webhook request.",
+        message: "Internal webhook error.",
       },
-      { status: 400 }
+      { status: 500 }
     );
   }
 }
