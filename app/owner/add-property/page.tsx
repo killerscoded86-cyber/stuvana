@@ -44,19 +44,19 @@ export default function AddPropertyPage() {
         } = await supabase
           .from("profiles")
           .select(
-            "account_type, verification_status, profile_photo_url"
+            "account_type, verification_status"
           )
           .eq("id", user.id)
           .single();
 
         if (profileError || !profile) {
           console.error(
-            "Verification profile lookup error:",
+            "Owner profile lookup error:",
             profileError
           );
 
           alert(
-            "Your account profile could not be verified. Please contact STUVANA support."
+            "Your account profile could not be loaded. Please contact STUVANA support."
           );
 
           router.push("/dashboard");
@@ -78,18 +78,6 @@ export default function AddPropertyPage() {
         ).toLowerCase();
 
         setVerificationStatus(status);
-
-        if (
-          status !== "verified" ||
-          !profile.profile_photo_url
-        ) {
-          alert(
-            "Identity verification is required before you can upload a property."
-          );
-
-          router.push("/owner/verification");
-          return;
-        }
       } catch (error) {
         console.error(
           "Owner verification check error:",
@@ -97,7 +85,7 @@ export default function AddPropertyPage() {
         );
 
         alert(
-          "Could not verify your owner account status."
+          "Could not check your owner account status."
         );
 
         router.push("/dashboard");
@@ -112,25 +100,35 @@ export default function AddPropertyPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    if (
-      verificationStatus !== "verified"
-    ) {
+    /*
+     * First verification check.
+     * This prevents an unverified owner from submitting
+     * through the normal page interface.
+     */
+    if (verificationStatus !== "verified") {
       alert(
-        "You must complete identity verification before uploading a property."
+        "You must complete identity verification before publishing a property."
       );
-
-      router.push("/owner/verification");
       return;
     }
 
-    if (!name || !location || !roomType || !price || !spaces) {
+    if (
+      !name ||
+      !location ||
+      !roomType ||
+      !price ||
+      !spaces
+    ) {
       alert("Please fill in all required fields.");
       return;
     }
 
     const basePrice = Number(price);
 
-    if (!Number.isFinite(basePrice) || basePrice <= 0) {
+    if (
+      !Number.isFinite(basePrice) ||
+      basePrice <= 0
+    ) {
       alert("Please enter a valid property price.");
       return;
     }
@@ -161,7 +159,7 @@ export default function AddPropertyPage() {
       }
 
       /*
-       * Re-check owner verification immediately before
+       * Final verification check immediately before
        * creating the property.
        */
       const {
@@ -170,7 +168,7 @@ export default function AddPropertyPage() {
       } = await supabase
         .from("profiles")
         .select(
-          "account_type, verification_status, profile_photo_url"
+          "account_type, verification_status"
         )
         .eq("id", user.id)
         .single();
@@ -179,7 +177,6 @@ export default function AddPropertyPage() {
         alert(
           "Your account profile could not be found."
         );
-
         return;
       }
 
@@ -187,7 +184,6 @@ export default function AddPropertyPage() {
         alert(
           "Only property owners can add properties."
         );
-
         return;
       }
 
@@ -199,41 +195,40 @@ export default function AddPropertyPage() {
 
       if (
         currentVerificationStatus !==
-          "verified" ||
-        !profile.profile_photo_url
+        "verified"
       ) {
-        alert(
-          "Your identity verification is incomplete. You cannot upload properties yet."
+        setVerificationStatus(
+          currentVerificationStatus
         );
 
-        router.push("/owner/verification");
+        alert(
+          "Your identity verification is incomplete. You cannot publish a property yet."
+        );
+
         return;
       }
 
-      // =====================================================
-      // CALCULATE FINAL STUDENT DISPLAY PRICE
-      // =====================================================
+      /*
+       * CALCULATE FINAL STUDENT DISPLAY PRICE
+       */
 
-      // Paystack Ghana local transaction fee
       const paystackFeeRate = 0.0195;
 
-      // Convert owner's price to pesewas
       const basePricePesewas = Math.round(
         basePrice * 100
       );
 
-      // Gross up the price so the Paystack processing fee
-      // is covered without reducing the owner's listed price.
       const displayPricePesewas = Math.ceil(
         basePricePesewas /
           (1 - paystackFeeRate)
       );
 
-      // Final price shown to students
       const displayPrice =
         displayPricePesewas / 100;
 
-      // 1. Create the property first
+      /*
+       * Create the property.
+       */
       const {
         data: property,
         error: propertyError,
@@ -243,13 +238,8 @@ export default function AddPropertyPage() {
           name,
           location,
           room_type: roomType,
-
-          // Original price set by the owner
           price: basePrice,
-
-          // Final price students see
           display_price: displayPrice,
-
           period,
           spaces: availableSpaces,
           university:
@@ -279,7 +269,9 @@ export default function AddPropertyPage() {
         sort_order: number;
       }[] = [];
 
-      // 2. Upload photos
+      /*
+       * Upload photos.
+       */
       for (
         let i = 0;
         i < photos.length;
@@ -327,7 +319,9 @@ export default function AddPropertyPage() {
         });
       }
 
-      // 3. Upload video
+      /*
+       * Upload video.
+       */
       if (video) {
         const fileExt =
           video.name
@@ -370,7 +364,9 @@ export default function AddPropertyPage() {
         });
       }
 
-      // 4. Save all media records
+      /*
+       * Save media records.
+       */
       if (mediaRows.length > 0) {
         const {
           error: mediaError,
@@ -385,7 +381,9 @@ export default function AddPropertyPage() {
         }
       }
 
-      // 5. Set the first photo as the property's main image
+      /*
+       * Set first photo as main property image.
+       */
       if (
         photos.length > 0 &&
         mediaRows.length > 0
@@ -483,65 +481,6 @@ export default function AddPropertyPage() {
     );
   }
 
-  if (
-    verificationStatus !==
-    "verified"
-  ) {
-    return (
-      <main className="dashboard-page">
-        <nav className="dashboard-nav">
-          <a
-            href="/"
-            className="logo"
-          >
-            STUVANA
-          </a>
-
-          <button
-            onClick={() =>
-              router.push(
-                "/dashboard"
-              )
-            }
-          >
-            ← Dashboard
-          </button>
-        </nav>
-
-        <section className="dashboard-header">
-          <p className="hero-label">
-            PROPERTY OWNER
-          </p>
-
-          <h1>
-            Verification Required
-          </h1>
-
-          <p>
-            You must complete identity
-            verification before you can
-            upload a property.
-          </p>
-
-          <button
-            type="button"
-            className="details-primary-button"
-            onClick={() =>
-              router.push(
-                "/owner/verification"
-              )
-            }
-            style={{
-              marginTop: "20px",
-            }}
-          >
-            Verify My Identity
-          </button>
-        </section>
-      </main>
-    );
-  }
-
   return (
     <main className="dashboard-page">
       <nav className="dashboard-nav">
@@ -565,7 +504,7 @@ export default function AddPropertyPage() {
 
       <section className="dashboard-header">
         <p className="hero-label">
-          VERIFIED PROPERTY OWNER
+          PROPERTY OWNER
         </p>
 
         <h1>Add Property</h1>
@@ -575,6 +514,73 @@ export default function AddPropertyPage() {
           on STUVANA.
         </p>
       </section>
+
+      {verificationStatus !== "verified" && (
+        <section
+          style={{
+            width: "100%",
+            maxWidth: "900px",
+            margin: "0 auto 20px",
+            padding: "18px",
+            borderRadius: "14px",
+            background:
+              verificationStatus ===
+              "pending"
+                ? "#fef3c7"
+                : "#fff7ed",
+            border:
+              verificationStatus ===
+              "pending"
+                ? "1px solid #fcd34d"
+                : "1px solid #fed7aa",
+            color:
+              verificationStatus ===
+              "pending"
+                ? "#92400e"
+                : "#9a3412",
+            boxSizing: "border-box",
+          }}
+        >
+          <strong>
+            {verificationStatus ===
+            "pending"
+              ? "Identity verification is being reviewed."
+              : verificationStatus ===
+                "rejected"
+              ? "Identity verification was rejected."
+              : "Identity verification is required before publishing."}
+          </strong>
+
+          <p
+            style={{
+              margin:
+                "8px 0 14px",
+              lineHeight: 1.5,
+            }}
+          >
+            You can complete all the
+            property details below now.
+            However, you must verify
+            your identity before you
+            can publish this property.
+          </p>
+
+          {verificationStatus !==
+            "pending" && (
+            <button
+              type="button"
+              className="details-primary-button"
+              onClick={() =>
+                router.push(
+                  "/owner/verification"
+                )
+              }
+            >
+              Verify Identity
+            </button>
+          )}
+        </section>
+      )}
 
       <section className="add-property-container">
         <form
@@ -840,33 +846,62 @@ export default function AddPropertyPage() {
             )}
           </div>
 
-          <div
-            style={{
-              marginBottom: "16px",
-              padding: "14px 16px",
-              borderRadius: "12px",
-              background: "#f0fdf4",
-              border:
-                "1px solid #bbf7d0",
-              color: "#166534",
-              fontSize: "14px",
-              lineHeight: 1.5,
-            }}
-          >
-            ✓ Your STUVANA owner
-            identity is verified. You
-            are allowed to submit
-            properties for admin review.
-          </div>
+          {verificationStatus ===
+            "verified" ? (
+            <div
+              style={{
+                marginBottom: "16px",
+                padding: "14px 16px",
+                borderRadius: "12px",
+                background: "#f0fdf4",
+                border:
+                  "1px solid #bbf7d0",
+                color: "#166534",
+                fontSize: "14px",
+                lineHeight: 1.5,
+              }}
+            >
+              ✓ Your STUVANA owner
+              identity is verified. You
+              are allowed to submit
+              properties for admin review.
+            </div>
+          ) : (
+            <div
+              style={{
+                marginBottom: "16px",
+                padding: "14px 16px",
+                borderRadius: "12px",
+                background: "#fef2f2",
+                border:
+                  "1px solid #fecaca",
+                color: "#991b1b",
+                fontSize: "14px",
+                lineHeight: 1.5,
+              }}
+            >
+              🔒 Identity verification
+              must be completed before
+              this property can be
+              published.
+            </div>
+          )}
 
           <button
             type="submit"
             className="add-property-submit"
-            disabled={loading}
+            disabled={
+              loading ||
+              verificationStatus !==
+                "verified"
+            }
           >
             {loading
               ? "Uploading Property..."
-              : "Publish Property"}
+              : verificationStatus ===
+                "verified"
+              ? "Publish Property"
+              : "Verify Identity to Publish"}
           </button>
         </form>
       </section>
