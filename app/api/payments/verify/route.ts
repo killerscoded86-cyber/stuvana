@@ -18,10 +18,6 @@ async function createOwnerNotification({
   message: string;
 }) {
   try {
-    /*
-     * Prevent duplicate notifications for the same
-     * owner + booking + notification type.
-     */
     let query = supabaseAdmin
       .from("owner_notifications")
       .select("id")
@@ -31,15 +27,9 @@ async function createOwnerNotification({
       .limit(1);
 
     if (bookingId) {
-      query = query.eq(
-        "booking_id",
-        bookingId
-      );
+      query = query.eq("booking_id", bookingId);
     } else {
-      query = query.is(
-        "booking_id",
-        null
-      );
+      query = query.is("booking_id", null);
     }
 
     const {
@@ -52,7 +42,6 @@ async function createOwnerNotification({
         "Notification duplicate check error:",
         existingError
       );
-
       return;
     }
 
@@ -60,20 +49,18 @@ async function createOwnerNotification({
       return;
     }
 
-    const {
-      error: notificationError,
-    } = await supabaseAdmin
-      .from("owner_notifications")
-      .insert({
-        owner_id: ownerId,
-        property_id: propertyId,
-        booking_id:
-          bookingId || null,
-        type,
-        title,
-        message,
-        is_read: false,
-      });
+    const { error: notificationError } =
+      await supabaseAdmin
+        .from("owner_notifications")
+        .insert({
+          owner_id: ownerId,
+          property_id: propertyId,
+          booking_id: bookingId || null,
+          type,
+          title,
+          message,
+          is_read: false,
+        });
 
     if (notificationError) {
       console.error(
@@ -82,10 +69,6 @@ async function createOwnerNotification({
       );
     }
   } catch (error) {
-    /*
-     * Notification failure must never cancel
-     * a successful payment.
-     */
     console.error(
       "Owner notification exception:",
       error
@@ -93,11 +76,6 @@ async function createOwnerNotification({
   }
 }
 
-/*
- * =====================================================
- * STUDENT NOTIFICATION
- * =====================================================
- */
 async function createStudentNotification({
   studentId,
   propertyId,
@@ -114,10 +92,6 @@ async function createStudentNotification({
   message: string;
 }) {
   try {
-    /*
-     * Prevent duplicate notifications for the same
-     * student + booking + notification type.
-     */
     let query = supabaseAdmin
       .from("student_notifications")
       .select("id")
@@ -127,15 +101,9 @@ async function createStudentNotification({
       .limit(1);
 
     if (bookingId) {
-      query = query.eq(
-        "booking_id",
-        bookingId
-      );
+      query = query.eq("booking_id", bookingId);
     } else {
-      query = query.is(
-        "booking_id",
-        null
-      );
+      query = query.is("booking_id", null);
     }
 
     const {
@@ -148,7 +116,6 @@ async function createStudentNotification({
         "Student notification duplicate check error:",
         existingError
       );
-
       return;
     }
 
@@ -156,20 +123,18 @@ async function createStudentNotification({
       return;
     }
 
-    const {
-      error: notificationError,
-    } = await supabaseAdmin
-      .from("student_notifications")
-      .insert({
-        student_id: studentId,
-        property_id: propertyId,
-        booking_id:
-          bookingId || null,
-        type,
-        title,
-        message,
-        is_read: false,
-      });
+    const { error: notificationError } =
+      await supabaseAdmin
+        .from("student_notifications")
+        .insert({
+          student_id: studentId,
+          property_id: propertyId,
+          booking_id: bookingId || null,
+          type,
+          title,
+          message,
+          is_read: false,
+        });
 
     if (notificationError) {
       console.error(
@@ -178,10 +143,6 @@ async function createStudentNotification({
       );
     }
   } catch (error) {
-    /*
-     * Notification failure must never cancel
-     * a successful payment.
-     */
     console.error(
       "Student notification exception:",
       error
@@ -200,48 +161,26 @@ async function createBookingNotifications({
   studentName: string;
   remainingSpaces: number;
 }) {
-  /*
-   * =====================================================
-   * OWNER BOOKING NOTIFICATION
-   * =====================================================
-   *
-   * Financial structure:
-   *
-   * total_amount = amount paid by student
-   * payment_processing_fee = Paystack charge
-   * amount = property amount before STUVANA commission
-   * commission_amount = STUVANA commission
-   * owner_amount = amount - commission
-   *
-   * Paystack charges are NOT deducted from the
-   * owner's property amount.
-   */
-  const studentPaid =
-    Number(
-      booking.total_amount || 0
-    );
+  const studentPaid = Number(
+    booking.total_amount || 0
+  );
 
-  const paystackCharges =
-    Number(
-      booking.payment_processing_fee || 0
-    );
+  const paystackCharges = Number(
+    booking.payment_processing_fee || 0
+  );
 
-  const propertyAmount =
-    Number(
-      booking.amount || 0
-    );
+  const propertyAmount = Number(
+    booking.amount || 0
+  );
 
-  const stuvanaCommission =
-    Number(
-      booking.commission_amount || 0
-    );
+  const stuvanaCommission = Number(
+    booking.commission_amount || 0
+  );
 
-  const ownerReceives =
-    Number(
-      booking.owner_amount ??
-        propertyAmount -
-          stuvanaCommission
-    );
+  const ownerReceives = Number(
+    booking.owner_amount ??
+      propertyAmount - stuvanaCommission
+  );
 
   await createOwnerNotification({
     ownerId: booking.owner_id,
@@ -259,13 +198,6 @@ async function createBookingNotifications({
       `Remaining spaces: ${remainingSpaces}.`,
   });
 
-  /*
-   * =====================================================
-   * STUDENT BOOKING NOTIFICATION
-   * =====================================================
-   *
-   * Student continues to see the full amount they paid.
-   */
   await createStudentNotification({
     studentId: booking.student_id,
     propertyId: booking.property_id,
@@ -278,11 +210,6 @@ async function createBookingNotifications({
       `Your accommodation allocation is now confirmed.`,
   });
 
-  /*
-   * =====================================================
-   * PROPERTY FULL NOTIFICATION FOR OWNER
-   * =====================================================
-   */
   if (remainingSpaces <= 0) {
     await createOwnerNotification({
       ownerId: booking.owner_id,
@@ -294,6 +221,472 @@ async function createBookingNotifications({
         `${property.name} is now fully booked. ` +
         `All available spaces have been allocated.`,
     });
+  }
+}
+
+async function sendOwnerBookingEmail({
+  booking,
+  property,
+  studentProfile,
+  remainingSpaces,
+}: {
+  booking: any;
+  property: any;
+  studentProfile: any;
+  remainingSpaces: number;
+}) {
+  try {
+    const resendApiKey =
+      process.env.RESEND_API_KEY;
+
+    if (!resendApiKey) {
+      console.warn(
+        "RESEND_API_KEY is not configured. Owner email notification skipped."
+      );
+      return;
+    }
+
+    const resend = new Resend(resendApiKey);
+
+    const {
+      data: ownerUserData,
+      error: ownerUserError,
+    } =
+      await supabaseAdmin.auth.admin.getUserById(
+        booking.owner_id
+      );
+
+    if (
+      ownerUserError ||
+      !ownerUserData?.user?.email
+    ) {
+      console.error(
+        "Owner email lookup error:",
+        ownerUserError
+      );
+      return;
+    }
+
+    const ownerEmail =
+      ownerUserData.user.email;
+
+    const emailStudentName =
+      studentProfile?.full_name ||
+      "A student";
+
+    const studentPhone =
+      studentProfile?.phone ||
+      "Not provided";
+
+    const university =
+      studentProfile?.university ||
+      "Not provided";
+
+    const fromEmail =
+      process.env.RESEND_FROM_EMAIL ||
+      "onboarding@resend.dev";
+
+    const studentPaid = Number(
+      booking.total_amount || 0
+    );
+
+    const paystackCharges = Number(
+      booking.payment_processing_fee || 0
+    );
+
+    const propertyAmount = Number(
+      booking.amount || 0
+    );
+
+    const stuvanaCommission = Number(
+      booking.commission_amount || 0
+    );
+
+    const ownerReceives = Number(
+      booking.owner_amount ??
+        propertyAmount -
+          stuvanaCommission
+    );
+
+    const { error: resendError } =
+      await resend.emails.send({
+        from: `STUVANA <${fromEmail}>`,
+        to: [ownerEmail],
+        subject:
+          `New STUVANA Booking - ${property.name}`,
+        html: `
+          <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827">
+            <h2>🎉 New STUVANA Booking</h2>
+
+            <p>
+              A student has successfully paid for your property.
+            </p>
+
+            <div style="padding:18px;background:#f9fafb;border-radius:12px;margin:20px 0">
+
+              <p>
+                <strong>Property:</strong>
+                ${property.name}
+              </p>
+
+              <p>
+                <strong>Student:</strong>
+                ${emailStudentName}
+              </p>
+
+              <p>
+                <strong>Phone:</strong>
+                ${studentPhone}
+              </p>
+
+              <p>
+                <strong>University:</strong>
+                ${university}
+              </p>
+
+              <hr style="border:0;border-top:1px solid #e5e7eb;margin:16px 0" />
+
+              <p>
+                <strong>Amount paid by student:</strong>
+                GH₵ ${studentPaid.toLocaleString()}
+              </p>
+
+              <p>
+                <strong>Property amount:</strong>
+                GH₵ ${propertyAmount.toLocaleString()}
+              </p>
+
+              <p>
+                <strong>Paystack charges:</strong>
+                GH₵ ${paystackCharges.toLocaleString()}
+              </p>
+
+              <p style="color:#166534">
+                <strong>
+                  Paystack charges are exempted from your earnings.
+                </strong>
+              </p>
+
+              <p style="color:#b45309">
+                <strong>
+                  STUVANA commission deducted:
+                </strong>
+                GH₵ ${stuvanaCommission.toLocaleString()}
+              </p>
+
+              <p style="padding:12px;background:#ecfdf5;border-radius:10px;color:#166534;font-size:18px">
+                <strong>Your earnings:</strong>
+                GH₵ ${ownerReceives.toLocaleString()}
+              </p>
+
+              <p>
+                <strong>Remaining spaces:</strong>
+                ${remainingSpaces}
+              </p>
+
+              <p>
+                <strong>Booking reference:</strong>
+                ${booking.paystack_reference}
+              </p>
+            </div>
+
+            ${
+              remainingSpaces <= 0
+                ? `
+                  <p style="padding:12px 16px;background:#fef2f2;border-radius:10px;color:#991b1b;font-weight:700">
+                    🚫 All spaces for this property have now been booked.
+                  </p>
+                `
+                : `
+                  <p style="padding:12px 16px;background:#f0fdf4;border-radius:10px;color:#166534;font-weight:700">
+                    ✅ ${remainingSpaces} space${
+                      remainingSpaces === 1
+                        ? ""
+                        : "s"
+                    } remaining.
+                  </p>
+                `
+            }
+
+            <p style="margin-top:24px;color:#6b7280;font-size:13px">
+              This notification was sent automatically by STUVANA.
+            </p>
+          </div>
+        `,
+      });
+
+    if (resendError) {
+      console.error(
+        "Owner booking email error:",
+        resendError
+      );
+    }
+  } catch (error) {
+    console.error(
+      "Owner booking email notification failed:",
+      error
+    );
+  }
+}
+
+async function sendAdminBookingEmail({
+  booking,
+  property,
+  studentProfile,
+  remainingSpaces,
+}: {
+  booking: any;
+  property: any;
+  studentProfile: any;
+  remainingSpaces: number;
+}) {
+  try {
+    const resendApiKey =
+      process.env.RESEND_API_KEY;
+
+    const adminEmail =
+      process.env.ADMIN_EMAIL;
+
+    if (!resendApiKey || !adminEmail) {
+      console.warn(
+        "RESEND_API_KEY or ADMIN_EMAIL is not configured. Admin booking email skipped."
+      );
+      return;
+    }
+
+    const resend = new Resend(resendApiKey);
+
+    const fromEmail =
+      process.env.RESEND_FROM_EMAIL ||
+      "onboarding@resend.dev";
+
+    const studentName =
+      studentProfile?.full_name ||
+      "A student";
+
+    const studentPhone =
+      studentProfile?.phone ||
+      "Not provided";
+
+    const studentUniversity =
+      studentProfile?.university ||
+      "Not provided";
+
+    const studentPaid = Number(
+      booking.total_amount || 0
+    );
+
+    const paystackCharges = Number(
+      booking.payment_processing_fee || 0
+    );
+
+    const propertyAmount = Number(
+      booking.amount || 0
+    );
+
+    const stuvanaCommission = Number(
+      booking.commission_amount || 0
+    );
+
+    const ownerReceives = Number(
+      booking.owner_amount ??
+        propertyAmount -
+          stuvanaCommission
+    );
+
+    const { data: ownerProfile } =
+      await supabaseAdmin
+        .from("profiles")
+        .select(
+          "full_name, phone, university"
+        )
+        .eq(
+          "id",
+          booking.owner_id
+        )
+        .maybeSingle();
+
+    const ownerName =
+      ownerProfile?.full_name ||
+      "Property owner";
+
+    const ownerPhone =
+      ownerProfile?.phone ||
+      "Not provided";
+
+    const { error: resendError } =
+      await resend.emails.send({
+        from: `STUVANA Admin <${fromEmail}>`,
+        to: [adminEmail],
+        subject:
+          `New Booking & Commission - ${property.name}`,
+        html: `
+          <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;max-width:750px;margin:0 auto">
+
+            <h2>💰 New STUVANA Booking</h2>
+
+            <p>
+              A student has successfully booked and paid for a property.
+            </p>
+
+            <div style="padding:20px;background:#f9fafb;border-radius:12px;margin:20px 0">
+
+              <h3>Booking Details</h3>
+
+              <p>
+                <strong>Property:</strong>
+                ${property.name}
+              </p>
+
+              <p>
+                <strong>Property ID:</strong>
+                ${property.id}
+              </p>
+
+              <p>
+                <strong>Booking ID:</strong>
+                ${booking.id}
+              </p>
+
+              <p>
+                <strong>Booking Reference:</strong>
+                ${booking.paystack_reference}
+              </p>
+
+              <p>
+                <strong>Remaining Spaces:</strong>
+                ${remainingSpaces}
+              </p>
+
+            </div>
+
+            <div style="padding:20px;background:#eff6ff;border-radius:12px;margin:20px 0">
+
+              <h3>Student Details</h3>
+
+              <p>
+                <strong>Name:</strong>
+                ${studentName}
+              </p>
+
+              <p>
+                <strong>Phone:</strong>
+                ${studentPhone}
+              </p>
+
+              <p>
+                <strong>University:</strong>
+                ${studentUniversity}
+              </p>
+
+            </div>
+
+            <div style="padding:20px;background:#f5f3ff;border-radius:12px;margin:20px 0">
+
+              <h3>Owner Details</h3>
+
+              <p>
+                <strong>Name:</strong>
+                ${ownerName}
+              </p>
+
+              <p>
+                <strong>Phone:</strong>
+                ${ownerPhone}
+              </p>
+
+              <p>
+                <strong>University:</strong>
+                ${ownerProfile?.university || "Not provided"}
+              </p>
+
+            </div>
+
+            <div style="padding:20px;background:#ecfdf5;border-radius:12px;margin:20px 0">
+
+              <h3>💰 Financial Breakdown</h3>
+
+              <p>
+                <strong>Amount paid by student:</strong>
+                GH₵ ${studentPaid.toLocaleString()}
+              </p>
+
+              <p>
+                <strong>Paystack processing charge:</strong>
+                GH₵ ${paystackCharges.toLocaleString()}
+              </p>
+
+              <p>
+                <strong>Property amount:</strong>
+                GH₵ ${propertyAmount.toLocaleString()}
+              </p>
+
+              <p style="color:#b45309">
+                <strong>
+                  STUVANA commission:
+                </strong>
+                GH₵ ${stuvanaCommission.toLocaleString()}
+              </p>
+
+              <p style="padding:14px;background:#dcfce7;border-radius:10px;color:#166534;font-size:19px">
+                <strong>
+                  STUVANA commission earned:
+                </strong>
+                GH₵ ${stuvanaCommission.toLocaleString()}
+              </p>
+
+              <p>
+                <strong>
+                  Owner amount after STUVANA commission:
+                </strong>
+                GH₵ ${ownerReceives.toLocaleString()}
+              </p>
+
+              <p style="font-size:13px;color:#6b7280">
+                Paystack processing charges are included in the
+                student's total payment and are not deducted
+                from the owner's property amount.
+              </p>
+
+            </div>
+
+            ${
+              remainingSpaces <= 0
+                ? `
+                  <div style="padding:15px;background:#fef2f2;border-radius:10px;color:#991b1b;font-weight:700">
+                    🚫 This property is now fully booked.
+                  </div>
+                `
+                : `
+                  <div style="padding:15px;background:#f0fdf4;border-radius:10px;color:#166534;font-weight:700">
+                    ✅ ${remainingSpaces} space${
+                      remainingSpaces === 1
+                        ? ""
+                        : "s"
+                    } remaining.
+                  </div>
+                `
+            }
+
+            <p style="margin-top:24px;color:#6b7280;font-size:13px">
+              This notification was sent automatically by STUVANA.
+            </p>
+
+          </div>
+        `,
+      });
+
+    if (resendError) {
+      console.error(
+        "Admin booking email error:",
+        resendError
+      );
+    }
+  } catch (error) {
+    console.error(
+      "Admin booking email notification failed:",
+      error
+    );
   }
 }
 
@@ -328,9 +721,6 @@ export async function POST(request: Request) {
       );
     }
 
-    /*
-     * Find the STUVANA booking.
-     */
     const {
       data: booking,
       error: bookingError,
@@ -369,11 +759,6 @@ export async function POST(request: Request) {
       );
     }
 
-    /*
-     * =====================================================
-     * ALREADY PAID + ALREADY PROCESSED
-     * =====================================================
-     */
     if (
       booking.status === "paid" &&
       booking.space_reduced === true
@@ -396,42 +781,31 @@ export async function POST(request: Request) {
         success: true,
         alreadyPaid: true,
         alreadyProcessed: true,
-        bookingId:
-          booking.id,
-        amount:
-          booking.amount,
+        bookingId: booking.id,
+        amount: booking.amount,
         paymentProcessingFee:
           booking.payment_processing_fee,
-        totalAmount:
-          booking.total_amount,
+        totalAmount: booking.total_amount,
         commission:
           booking.commission_amount,
         ownerAmount:
           booking.owner_amount,
         remainingSpaces:
-          paidProperty?.spaces ??
-          null,
+          paidProperty?.spaces ?? null,
         roomUnavailable:
           Number(
-            paidProperty?.spaces ??
-              0
+            paidProperty?.spaces ?? 0
           ) <= 0,
       });
     }
 
-    /*
-     * =====================================================
-     * OLD PAID BOOKING
-     * =====================================================
-     */
     if (
       booking.status === "paid" &&
       booking.space_reduced !== true
     ) {
       const {
         data: property,
-        error:
-          propertyError,
+        error: propertyError,
       } =
         await supabaseAdmin
           .from("properties")
@@ -530,17 +904,10 @@ export async function POST(request: Request) {
         await supabaseAdmin
           .from("bookings")
           .update({
-            space_reduced:
-              true,
+            space_reduced: true,
           })
-          .eq(
-            "id",
-            booking.id
-          )
-          .eq(
-            "space_reduced",
-            false
-          )
+          .eq("id", booking.id)
+          .eq("space_reduced", false)
           .select("*")
           .maybeSingle();
 
@@ -554,8 +921,7 @@ export async function POST(request: Request) {
           .from("properties")
           .update({
             spaces:
-              remainingSpaces +
-              1,
+              remainingSpaces + 1,
           })
           .eq(
             "id",
@@ -580,8 +946,7 @@ export async function POST(request: Request) {
           .from("properties")
           .update({
             spaces:
-              remainingSpaces +
-              1,
+              remainingSpaces + 1,
           })
           .eq(
             "id",
@@ -608,28 +973,20 @@ export async function POST(request: Request) {
           success:
             latestBooking?.status ===
             "paid",
-          alreadyPaid:
-            true,
+          alreadyPaid: true,
           bookingId:
             booking.id,
           remainingSpaces:
-            remainingSpaces +
-            1,
+            remainingSpaces + 1,
         });
       }
 
-      /*
-       * Get student information for the dashboard
-       * notification.
-       */
       const {
         data: studentProfile,
       } =
         await supabaseAdmin
           .from("profiles")
-          .select(
-            "full_name"
-          )
+          .select("full_name")
           .eq(
             "id",
             booking.student_id
@@ -637,13 +994,11 @@ export async function POST(request: Request) {
           .maybeSingle();
 
       const studentName =
-        studentProfile
-          ?.full_name ||
+        studentProfile?.full_name ||
         "A student";
 
       await createBookingNotifications({
-        booking:
-          markedBooking,
+        booking: markedBooking,
         property,
         studentName,
         remainingSpaces,
@@ -671,11 +1026,6 @@ export async function POST(request: Request) {
       });
     }
 
-    /*
-     * =====================================================
-     * VERIFY NEW PAYMENT WITH PAYSTACK
-     * =====================================================
-     */
     const response =
       await fetch(
         `https://api.paystack.co/transaction/verify/${encodeURIComponent(
@@ -689,8 +1039,7 @@ export async function POST(request: Request) {
             "Content-Type":
               "application/json",
           },
-          cache:
-            "no-store",
+          cache: "no-store",
         }
       );
 
@@ -718,9 +1067,6 @@ export async function POST(request: Request) {
     const transaction =
       paystackData.data;
 
-    /*
-     * Payment must actually be successful.
-     */
     if (
       transaction.status !==
       "success"
@@ -732,9 +1078,6 @@ export async function POST(request: Request) {
       });
     }
 
-    /*
-     * Confirm exact amount.
-     */
     const expectedAmount =
       Math.round(
         Number(
@@ -769,9 +1112,6 @@ export async function POST(request: Request) {
       );
     }
 
-    /*
-     * Confirm currency.
-     */
     if (
       transaction.currency !==
       booking.currency
@@ -796,9 +1136,6 @@ export async function POST(request: Request) {
       );
     }
 
-    /*
-     * Confirm reference.
-     */
     if (
       transaction.reference !==
       booking.paystack_reference
@@ -822,9 +1159,6 @@ export async function POST(request: Request) {
       );
     }
 
-    /*
-     * Get the property.
-     */
     const {
       data: property,
       error: propertyError,
@@ -871,11 +1205,6 @@ export async function POST(request: Request) {
       );
     }
 
-    /*
-     * =====================================================
-     * ATOMIC SPACE REDUCTION
-     * =====================================================
-     */
     let remainingSpaces: number;
 
     try {
@@ -924,11 +1253,6 @@ export async function POST(request: Request) {
       );
     }
 
-    /*
-     * =====================================================
-     * MARK BOOKING AS PAID
-     * =====================================================
-     */
     const {
       data: updatedBooking,
       error: updateError,
@@ -940,21 +1264,11 @@ export async function POST(request: Request) {
           paid_at:
             transaction.paid_at ||
             new Date().toISOString(),
-          space_reduced:
-            true,
+          space_reduced: true,
         })
-        .eq(
-          "id",
-          booking.id
-        )
-        .eq(
-          "status",
-          "pending"
-        )
-        .eq(
-          "space_reduced",
-          false
-        )
+        .eq("id", booking.id)
+        .eq("status", "pending")
+        .eq("space_reduced", false)
         .select("*")
         .maybeSingle();
 
@@ -964,16 +1278,11 @@ export async function POST(request: Request) {
         updateError
       );
 
-      /*
-       * Roll back the space if the booking
-       * could not be confirmed.
-       */
       await supabaseAdmin
         .from("properties")
         .update({
           spaces:
-            remainingSpaces +
-            1,
+            remainingSpaces + 1,
         })
         .eq(
           "id",
@@ -993,9 +1302,6 @@ export async function POST(request: Request) {
       );
     }
 
-    /*
-     * Handle duplicate verification attempts.
-     */
     if (!updatedBooking) {
       const {
         data: latestBooking,
@@ -1017,8 +1323,7 @@ export async function POST(request: Request) {
           .from("properties")
           .update({
             spaces:
-              remainingSpaces +
-              1,
+              remainingSpaces + 1,
           })
           .eq(
             "id",
@@ -1034,9 +1339,7 @@ export async function POST(request: Request) {
         } =
           await supabaseAdmin
             .from("properties")
-            .select(
-              "spaces"
-            )
+            .select("spaces")
             .eq(
               "id",
               booking.property_id
@@ -1044,10 +1347,8 @@ export async function POST(request: Request) {
             .maybeSingle();
 
         return NextResponse.json({
-          success:
-            true,
-          alreadyPaid:
-            true,
+          success: true,
+          alreadyPaid: true,
           bookingId:
             latestBooking.id,
           remainingSpaces:
@@ -1060,8 +1361,7 @@ export async function POST(request: Request) {
         .from("properties")
         .update({
           spaces:
-            remainingSpaces +
-            1,
+            remainingSpaces + 1,
         })
         .eq(
           "id",
@@ -1081,18 +1381,13 @@ export async function POST(request: Request) {
       );
     }
 
-    /*
-     * =====================================================
-     * CREATE OWNER + STUDENT DASHBOARD NOTIFICATIONS
-     * =====================================================
-     */
     const {
       data: studentProfile,
     } =
       await supabaseAdmin
         .from("profiles")
         .select(
-          "full_name"
+          "full_name, phone, university"
         )
         .eq(
           "id",
@@ -1101,13 +1396,11 @@ export async function POST(request: Request) {
         .maybeSingle();
 
     const studentName =
-      studentProfile
-        ?.full_name ||
+      studentProfile?.full_name ||
       "A student";
 
     await createBookingNotifications({
-      booking:
-        updatedBooking,
+      booking: updatedBooking,
       property,
       studentName,
       remainingSpaces,
@@ -1115,256 +1408,26 @@ export async function POST(request: Request) {
 
     /*
      * =====================================================
-     * OWNER EMAIL NOTIFICATION
+     * OWNER EMAIL + ADMIN EMAIL
      * =====================================================
      */
-    try {
-      const resendApiKey =
-        process.env.RESEND_API_KEY;
 
-      if (!resendApiKey) {
-        console.warn(
-          "RESEND_API_KEY is not configured. Owner email notification skipped."
-        );
-      } else {
-        const resend =
-          new Resend(
-            resendApiKey
-          );
+    await sendOwnerBookingEmail({
+      booking: updatedBooking,
+      property,
+      studentProfile,
+      remainingSpaces,
+    });
 
-        const {
-          data:
-            ownerUserData,
-          error:
-            ownerUserError,
-        } =
-          await supabaseAdmin.auth.admin.getUserById(
-            booking.owner_id
-          );
-
-        if (
-          ownerUserError ||
-          !ownerUserData?.user?.email
-        ) {
-          console.error(
-            "Owner email lookup error:",
-            ownerUserError
-          );
-        } else {
-          const {
-            data:
-              detailedStudentProfile,
-          } =
-            await supabaseAdmin
-              .from("profiles")
-              .select(
-                "full_name, phone, university"
-              )
-              .eq(
-                "id",
-                booking.student_id
-              )
-              .maybeSingle();
-
-          const ownerEmail =
-            ownerUserData
-              .user
-              .email;
-
-          const emailStudentName =
-            detailedStudentProfile
-              ?.full_name ||
-            "A student";
-
-          const studentPhone =
-            detailedStudentProfile
-              ?.phone ||
-            "Not provided";
-
-          const university =
-            detailedStudentProfile
-              ?.university ||
-            "Not provided";
-
-          const fromEmail =
-            process.env
-              .RESEND_FROM_EMAIL ||
-            "onboarding@resend.dev";
-
-          const studentPaid =
-            Number(
-              updatedBooking.total_amount ||
-                0
-            );
-
-          const paystackCharges =
-            Number(
-              updatedBooking.payment_processing_fee ||
-                0
-            );
-
-          const propertyAmount =
-            Number(
-              updatedBooking.amount ||
-                0
-            );
-
-          const stuvanaCommission =
-            Number(
-              updatedBooking.commission_amount ||
-                0
-            );
-
-          const ownerReceives =
-            Number(
-              updatedBooking.owner_amount ??
-                propertyAmount -
-                  stuvanaCommission
-            );
-
-          const {
-            error:
-              resendError,
-          } =
-            await resend.emails.send({
-              from:
-                `STUVANA <${fromEmail}>`,
-              to: [
-                ownerEmail,
-              ],
-              subject:
-                `New STUVANA Booking - ${property.name}`,
-              html: `
-                <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111827;">
-                  <h2 style="margin-bottom: 8px;">
-                    🎉 New STUVANA Booking
-                  </h2>
-
-                  <p>
-                    A student has successfully paid for your property.
-                  </p>
-
-                  <div style="padding: 18px; background: #f9fafb; border-radius: 12px; margin: 20px 0;">
-                    <p style="margin: 6px 0;">
-                      <strong>Property:</strong>
-                      ${property.name}
-                    </p>
-
-                    <p style="margin: 6px 0;">
-                      <strong>Student:</strong>
-                      ${emailStudentName}
-                    </p>
-
-                    <p style="margin: 6px 0;">
-                      <strong>Phone:</strong>
-                      ${studentPhone}
-                    </p>
-
-                    <p style="margin: 6px 0;">
-                      <strong>University:</strong>
-                      ${university}
-                    </p>
-
-                    <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 16px 0;" />
-
-                    <p style="margin: 6px 0;">
-                      <strong>Amount paid by student:</strong>
-                      GH₵ ${studentPaid.toLocaleString()}
-                    </p>
-
-                    <p style="margin: 6px 0;">
-                      <strong>Property amount:</strong>
-                      GH₵ ${propertyAmount.toLocaleString()}
-                    </p>
-
-                    <p style="margin: 6px 0;">
-                      <strong>Paystack charges:</strong>
-                      GH₵ ${paystackCharges.toLocaleString()}
-                    </p>
-
-                    <p style="margin: 6px 0; color: #166534;">
-                      <strong>Paystack charges are exempted from your earnings.</strong>
-                    </p>
-
-                    <p style="margin: 6px 0; color: #b45309;">
-                      <strong>STUVANA commission deducted:</strong>
-                      GH₵ ${stuvanaCommission.toLocaleString()}
-                    </p>
-
-                    <p style="margin: 12px 0 0; padding: 12px; background: #ecfdf5; border-radius: 10px; color: #166534; font-size: 18px;">
-                      <strong>Your earnings:</strong>
-                      GH₵ ${ownerReceives.toLocaleString()}
-                    </p>
-
-                    <p style="margin: 14px 0 6px;">
-                      <strong>Remaining spaces:</strong>
-                      ${remainingSpaces}
-                    </p>
-
-                    <p style="margin: 6px 0;">
-                      <strong>Booking reference:</strong>
-                      ${updatedBooking.paystack_reference}
-                    </p>
-                  </div>
-
-                  <div style="padding: 14px 16px; background: #eff6ff; border-radius: 10px; color: #1e40af;">
-                    <strong>Payment breakdown</strong>
-                    <p style="margin: 6px 0 0;">
-                      Student payment includes the Paystack processing charge.
-                      That charge is not deducted from your property amount.
-                      STUVANA commission is deducted from the property amount
-                      shown above.
-                    </p>
-                  </div>
-
-                  ${
-                    remainingSpaces <= 0
-                      ? `
-                        <p style="padding: 12px 16px; background: #fef2f2; border-radius: 10px; color: #991b1b; font-weight: 700;">
-                          🚫 All spaces for this property have now been booked.
-                        </p>
-                      `
-                      : `
-                        <p style="padding: 12px 16px; background: #f0fdf4; border-radius: 10px; color: #166534; font-weight: 700;">
-                          ✅ ${remainingSpaces} space${
-                            remainingSpaces ===
-                            1
-                              ? ""
-                              : "s"
-                          } remaining.
-                        </p>
-                      `
-                  }
-
-                  <p style="margin-top: 24px; color: #6b7280; font-size: 13px;">
-                    This notification was sent automatically by STUVANA.
-                  </p>
-                </div>
-              `,
-            });
-
-          if (
-            resendError
-          ) {
-            console.error(
-              "Resend email error:",
-              resendError
-            );
-          }
-        }
-      }
-    } catch (
-      notificationError
-    ) {
-      console.error(
-        "Owner email notification failed:",
-        notificationError
-      );
-    }
+    await sendAdminBookingEmail({
+      booking: updatedBooking,
+      property,
+      studentProfile,
+      remainingSpaces,
+    });
 
     return NextResponse.json({
-      success:
-        true,
+      success: true,
       bookingId:
         updatedBooking.id,
       amount:
@@ -1379,8 +1442,7 @@ export async function POST(request: Request) {
         updatedBooking.owner_amount,
       remainingSpaces,
       roomUnavailable:
-        remainingSpaces <=
-        0,
+        remainingSpaces <= 0,
     });
   } catch (error) {
     console.error(

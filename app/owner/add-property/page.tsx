@@ -459,6 +459,52 @@ export default function AddPropertyPage() {
         }
       }
 
+      // Send admin notification.
+      // A failure here will NOT cancel the successful property submission.
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (session?.access_token) {
+          const notificationResponse =
+            await fetch(
+              "/api/admin/property-submitted",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type":
+                    "application/json",
+                  Authorization:
+                    `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({
+                  propertyId,
+                }),
+              }
+            );
+
+          if (!notificationResponse.ok) {
+            const notificationError =
+              await notificationResponse.text();
+
+            console.error(
+              "Admin property notification failed:",
+              notificationError
+            );
+          }
+        } else {
+          console.error(
+            "No active session found for admin property notification."
+          );
+        }
+      } catch (notificationError) {
+        console.error(
+          "Admin property notification error:",
+          notificationError
+        );
+      }
+
       alert(
         video
           ? "Property, photos, video and precise location uploaded successfully!"
