@@ -17,6 +17,12 @@ export default function AddPropertyPage() {
   const [walkingMinutes, setWalkingMinutes] = useState("");
   const [description, setDescription] = useState("");
 
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+  const [locationAccuracy, setLocationAccuracy] =
+    useState<number | null>(null);
+  const [gettingLocation, setGettingLocation] = useState(false);
+
   const [photos, setPhotos] = useState<File[]>([]);
   const [video, setVideo] = useState<File | null>(null);
 
@@ -43,9 +49,7 @@ export default function AddPropertyPage() {
           error: profileError,
         } = await supabase
           .from("profiles")
-          .select(
-            "account_type, verification_status"
-          )
+          .select("account_type, verification_status")
           .eq("id", user.id)
           .single();
 
@@ -64,17 +68,14 @@ export default function AddPropertyPage() {
         }
 
         if (profile.account_type !== "owner") {
-          alert(
-            "Only property owners can add properties."
-          );
+          alert("Only property owners can add properties.");
 
           router.push("/dashboard");
           return;
         }
 
         const status = String(
-          profile.verification_status ||
-            "unverified"
+          profile.verification_status || "unverified"
         ).toLowerCase();
 
         setVerificationStatus(status);
@@ -97,14 +98,67 @@ export default function AddPropertyPage() {
     checkOwnerVerification();
   }, [router]);
 
+  function getCurrentLocation() {
+    if (!navigator.geolocation) {
+      alert(
+        "Location services are not supported by this browser."
+      );
+      return;
+    }
+
+    setGettingLocation(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const {
+          latitude: currentLatitude,
+          longitude: currentLongitude,
+          accuracy,
+        } = position.coords;
+
+        setLatitude(currentLatitude);
+        setLongitude(currentLongitude);
+        setLocationAccuracy(accuracy);
+
+        setGettingLocation(false);
+      },
+      (error) => {
+        console.error(
+          "Geolocation error:",
+          error
+        );
+
+        setGettingLocation(false);
+
+        if (error.code === 1) {
+          alert(
+            "Location permission was denied. Please allow location access in your browser and try again."
+          );
+        } else if (error.code === 2) {
+          alert(
+            "Your location could not be determined. Please make sure your phone's location services are turned on."
+          );
+        } else if (error.code === 3) {
+          alert(
+            "Getting your location timed out. Please try again."
+          );
+        } else {
+          alert(
+            "Could not get your current location. Please try again."
+          );
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      }
+    );
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    /*
-     * First verification check.
-     * This prevents an unverified owner from submitting
-     * through the normal page interface.
-     */
     if (verificationStatus !== "verified") {
       alert(
         "You must complete identity verification before publishing a property."
@@ -120,6 +174,16 @@ export default function AddPropertyPage() {
       !spaces
     ) {
       alert("Please fill in all required fields.");
+      return;
+    }
+
+    if (
+      latitude === null ||
+      longitude === null
+    ) {
+      alert(
+        "Please use the 'Use My Current Location' button to add the property's precise location before publishing."
+      );
       return;
     }
 
@@ -158,10 +222,6 @@ export default function AddPropertyPage() {
         return;
       }
 
-      /*
-       * Final verification check immediately before
-       * creating the property.
-       */
       const {
         data: profile,
         error: profileError,
@@ -208,10 +268,6 @@ export default function AddPropertyPage() {
         return;
       }
 
-      /*
-       * CALCULATE FINAL STUDENT DISPLAY PRICE
-       */
-
       const paystackFeeRate = 0.0195;
 
       const basePricePesewas = Math.round(
@@ -226,9 +282,6 @@ export default function AddPropertyPage() {
       const displayPrice =
         displayPricePesewas / 100;
 
-      /*
-       * Create the property.
-       */
       const {
         data: property,
         error: propertyError,
@@ -249,6 +302,8 @@ export default function AddPropertyPage() {
           walking_minutes: walkingMinutes
             ? Number(walkingMinutes)
             : null,
+          latitude,
+          longitude,
           owner_id: user.id,
           image_url: null,
         })
@@ -269,9 +324,6 @@ export default function AddPropertyPage() {
         sort_order: number;
       }[] = [];
 
-      /*
-       * Upload photos.
-       */
       for (
         let i = 0;
         i < photos.length;
@@ -319,9 +371,6 @@ export default function AddPropertyPage() {
         });
       }
 
-      /*
-       * Upload video.
-       */
       if (video) {
         const fileExt =
           video.name
@@ -364,9 +413,6 @@ export default function AddPropertyPage() {
         });
       }
 
-      /*
-       * Save media records.
-       */
       if (mediaRows.length > 0) {
         const {
           error: mediaError,
@@ -381,9 +427,6 @@ export default function AddPropertyPage() {
         }
       }
 
-      /*
-       * Set first photo as main property image.
-       */
       if (
         photos.length > 0 &&
         mediaRows.length > 0
@@ -418,8 +461,8 @@ export default function AddPropertyPage() {
 
       alert(
         video
-          ? "Property, photos and video uploaded successfully!"
-          : "Property and photos uploaded successfully!"
+          ? "Property, photos, video and precise location uploaded successfully!"
+          : "Property, photos and precise location uploaded successfully!"
       );
 
       router.push(
@@ -662,6 +705,85 @@ export default function AddPropertyPage() {
 
           <div className="form-section">
             <h2>
+              Precise Property Location
+            </h2>
+
+            <p className="upload-help">
+              This lets students navigate
+              directly to the property
+              using map and ride services.
+            </p>
+
+            <button
+              type="button"
+              className="details-primary-button"
+              onClick={getCurrentLocation}
+              disabled={gettingLocation}
+              style={{
+                marginTop: "8px",
+              }}
+            >
+              {gettingLocation
+                ? "Getting Precise Location..."
+                : latitude !== null &&
+                  longitude !== null
+                ? "Update My Current Location"
+                : "📍 Use My Current Location"}
+            </button>
+
+            {latitude !== null &&
+              longitude !== null && (
+                <div
+                  style={{
+                    marginTop: "14px",
+                    padding: "14px 16px",
+                    borderRadius: "12px",
+                    background: "#f0fdf4",
+                    border:
+                      "1px solid #bbf7d0",
+                    color: "#166534",
+                    fontSize: "14px",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  <strong>
+                    ✓ Precise location captured
+                  </strong>
+
+                  <p
+                    style={{
+                      margin:
+                        "6px 0 0",
+                    }}
+                  >
+                    {locationAccuracy !==
+                    null
+                      ? `Accuracy: approximately ${Math.round(
+                          locationAccuracy
+                        )} metres`
+                      : "GPS coordinates captured successfully."}
+                  </p>
+                </div>
+              )}
+
+            {latitude === null &&
+              longitude === null && (
+                <p
+                  className="upload-help"
+                  style={{
+                    marginTop: "10px",
+                  }}
+                >
+                  Required before publishing.
+                  For the most accurate result,
+                  use this button while you
+                  are physically at the property.
+                </p>
+              )}
+          </div>
+
+          <div className="form-section">
+            <h2>
               Room & Pricing
             </h2>
 
@@ -893,15 +1015,20 @@ export default function AddPropertyPage() {
             disabled={
               loading ||
               verificationStatus !==
-                "verified"
+                "verified" ||
+              latitude === null ||
+              longitude === null
             }
           >
             {loading
               ? "Uploading Property..."
-              : verificationStatus ===
+              : verificationStatus !==
                 "verified"
-              ? "Publish Property"
-              : "Verify Identity to Publish"}
+              ? "Verify Identity to Publish"
+              : latitude === null ||
+                longitude === null
+              ? "Add Precise Location to Publish"
+              : "Publish Property"}
           </button>
         </form>
       </section>
